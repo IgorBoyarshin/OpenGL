@@ -1,0 +1,4 @@
+Texture texture1("path1");
+Texture texture2("path2");
+texture1.Bind(0); // XXX bind finally after all creations
+texture2.Bind(1);

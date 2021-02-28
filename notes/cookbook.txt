@@ -1,0 +1,108 @@
+===============================================================================
+=================================== VBO =======================================
+===============================================================================
+STREAM  -- The data store contents will be modified once and used at most a few times.
+STATIC  -- The data store contents will be modified once and used many times.
+DYNAMIC -- The data store contents will be modified repeatedly and used many times.
+DRAW -- The data store contents are modified by the application,
+        and used as the source for GL drawing and image specification commands.
+READ -- The data store contents are modified by reading data from the GL,
+        and used to return that data when queried by the application.
+COPY -- The data store contents are modified by reading data from the GL,
+        and used as the source for GL drawing and image specification commands.
+
+unsigned int m_id_VBO;
+glGenBuffers(1, &m_id_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_id_VBO);
+        glBufferData(GL_ARRAY_BUFFER, ---size_bytes---, ---data_ptr---, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+glDeleteBuffers(1, &m_ID);
+===============================================================================
+=================================== IBO (EBO) =================================
+===============================================================================
+unsigned int m_id_IBO;
+glGenBuffers(1, &m_id_IBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_id_IBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, ---size_bytes---, ---data_ptr---, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+glDeleteBuffers(1, &m_id_IBO);
+===============================================================================
+=================================== VAO =======================================
+===============================================================================
+// Stores calls to:
+// - glEnableVertexAttribArray
+// - glVertexAttribPointer
+// - VBOs associated with attribs
+// - EBO(IBO)
+
+
+unsigned int m_id_VAO;
+glGenVertexArrays(1, &m_id_VAO);
+    glBindVertexArray(m_id_VAO);
+        // Bind VBO
+        // Possibly initialize VBO here
+        // foreach:
+            // Stride == 0 -> tightly packed, determine automatically
+            glEnableVertexAttribArray(i);
+            glVertexAttribPointer(i, ---floats_per_vertex---, GL_FLOAT, GL_FALSE /* is normalized? */,
+                    ---stride_bytes---, reinterpret_cast<const void*>(---offset---));
+            // glVertexAttribPointer(i, element.count, element.type, element.normalized,
+            //        vboLayout.GetStride(), reinterpret_cast<const void*>(offset));
+        // Bind IBO
+    glBindVertexArray(0);
+glDeleteVertexArrays(1, &m_id_VAO);
+===============================================================================
+=================================== Shader ====================================
+===============================================================================
+unsigned int m_id_Shader;
+// [..]
+    glUseProgram(m_id_Shader);
+    glUseProgram(0);
+glDeleteProgram(m_ID);
+===============================================================================
+=================================== Texture ===================================
+===============================================================================
+unsigned int m_Texture;
+stbi_set_flip_vertically_on_load(true);
+int BPP = 0; // TODO
+unsigned char* buffer = stbi_load(filepath.c_str(), &m_Width, &m_Height, &BPP, 4);
+glGenTextures(1, &m_id_Texture);
+    glBindTexture(GL_TEXTURE_2D, m_id_Texture);
+
+    // GL_NEAREST, GL_LINEAR (smooth)
+    // GL_NEAREST_MIPMAP_LINEAR: linearly interpolates between the
+    // two mipmaps that most closely match the size of a pixel and
+    // samples the interpolated level via nearest neighbor interpolation.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); // no MIPMAPs here!
+    // GL_REPEAT, GL_MIRRORED_REPEAT, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_BORDER
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_Width, m_Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+    // TODO: generate mipmaps
+    // glGenerateMipmap(GL_TEXTURE_2D);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+if (buffer) stbi_image_free(buffer);
+glDeleteTextures(1, &m_id_Texture);
+
+
+glActiveTexture(GL_TEXTURE0 + ---slot---);
+glBindTexture(GL_TEXTURE_2D, m_id_Texture);
+    shader.SetUniform1i("u_Texture1", ---slot---); // number should match the currently bound texture slot!
+glBindTexture(GL_TEXTURE_2D, 0);
+===============================================================================
+=================================== Render ====================================
+===============================================================================
+glUseProgram(m_id_Shader);
+glBindVertexArray(m_id_VAO);
+glDrawElements(GL_TRIANGLES, ---count_to_draw---, GL_UNSIGNED_INT, 0);
+glBindVertexArray(0);
+
+
+// Unbind order:
+vao.Unbind();
+vbo.Unbind();
+ibo.Unbind();
+shader.Unbind();
