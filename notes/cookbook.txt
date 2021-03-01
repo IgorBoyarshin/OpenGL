@@ -44,9 +44,9 @@ glGenVertexArrays(1, &m_id_VAO);
         // foreach:
             // Stride == 0 -> tightly packed, determine automatically
             glEnableVertexAttribArray(i);
-            glVertexAttribPointer(i, ---floats_per_vertex---, GL_FLOAT, GL_FALSE /* is normalized? */,
+            glVertexAttribPointer(i, ---floats_per_vertex---, GL_FLOAT, GL_FALSE /* should normalize? */,
                     ---stride_bytes---, reinterpret_cast<const void*>(---offset---));
-            // glVertexAttribPointer(i, element.count, element.type, element.normalized,
+            // glVertexAttribPointer(i, element.count, element.type, element.should_normalize,
             //        vboLayout.GetStride(), reinterpret_cast<const void*>(offset));
         // Bind IBO
     glBindVertexArray(0);
