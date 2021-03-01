@@ -5,6 +5,8 @@
 #include <vector>
 #include <array>
 #include <random>
+#include <numeric>
+#include <algorithm>
 
 #include "Shader.h"
 #include "Texture.h"
@@ -194,8 +196,8 @@ int main() {
     Shader shader("tile.vert", "tile.frag");
     shader.bind();
 
-    const auto tile_size = 15; // pixels
-    const auto border = 60; // pixels
+    const auto tile_size = 4; // pixels
+    const auto border = 1; // pixels
     FieldSize field_size{ tile_size, border, global_state.width, global_state.height };
     std::vector<float> colors(3 * 4 * field_size.width * field_size.height);
     regenerateColors(colors);
@@ -209,6 +211,8 @@ int main() {
     const float change_every = 0.2f;
     float last_change = 0.0f;
     float last_time = 0.0f;
+    unsigned int elapsed_times_i = 0;
+    std::array<float, 10> elapsed_times;
     while (!glfwWindowShouldClose(window)) {
         if (global_state.resize_recalculation_required) {
             global_state.resize_recalculation_required = false;
@@ -250,6 +254,17 @@ int main() {
 
         pointer = Vector2f(global_state.mouse_x, global_state.mouse_y);
         shader.setUniform2f("u_Pointer", pointer.x, pointer.y);
+
+        elapsed_times[elapsed_times_i++] = delta_time;
+        if (elapsed_times_i >= elapsed_times.size()) elapsed_times_i = 0;
+
+        const float avg_elapsed = std::accumulate(elapsed_times.cbegin(), elapsed_times.cend(), 0.0f) / elapsed_times.size();
+        const auto [min_elapsed, max_elapsed] = std::minmax_element(elapsed_times.cbegin(), elapsed_times.cend());
+        const float avg_fps = 1.0f / avg_elapsed;
+        const float min_fps = 1.0f / (*max_elapsed);
+        const float max_fps = 1.0f / (*min_elapsed);
+        std::cout << "Avg elapsed = " << avg_elapsed * 1000.0f << "[" << *min_elapsed * 1000.0f << ";" << *max_elapsed * 1000.0f << "] ms"
+            << "  Avg FPS = " << avg_fps << "[" << min_fps << ";" << max_fps << "]" << '\n';
     }
 
     glfwTerminate();
@@ -309,7 +324,7 @@ GLFWwindow* init(unsigned int width, unsigned int height) {
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSwapInterval(1);
+    glfwSwapInterval(0); // 0 -- unbounded (may have tearing), 1 -- almost vsync
 
     if (glewInit() != GLEW_OK) {
         std::cout << ":> Failed at glewInit()" << '\n';
