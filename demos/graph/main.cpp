@@ -29,30 +29,13 @@ T getRandomUniformFloat(T low, T high) {
 
 struct GlobalState {
     bool resize_recalculation_required = false;
-    unsigned int width = 1920;
-    unsigned int height = 1080;
+    unsigned int width = 2500;
+    unsigned int height = 1300;
     unsigned int mouse_x = 0;
     unsigned int mouse_y = 0;
     bool pause = false;
 };
-
 static GlobalState global_state;
-
-
-void APIENTRY openglCallbackFunction(
-        __attribute__((unused)) GLenum source,
-        GLenum type,
-        GLuint id,
-        GLenum severity,
-        __attribute__((unused)) GLsizei length,
-        const GLchar* message,
-        __attribute__((unused)) const void* userParam
-);
-
-GLFWwindow* init(unsigned int widht, unsigned int height);
-void processInput(GLFWwindow *window, float dt);
-
-
 
 
 template<typename T>
@@ -144,19 +127,6 @@ struct Graph {
             glBindVertexArray(0);
         }
 
-        // NOTE: needs logic fix
-        // void setHistorySize(unsigned int count) noexcept {
-        //     // Cycle-shift to aligned state to make resizing valid
-        //     // Note: performance can be improved
-        //     while (history_i != 0) {
-        //         T first = history.at(0);
-        //         for (unsigned int i = 0; i < history.size() - 1; i++) history[i] = history[i + 1];
-        //         history[history.size() - 1] = first;
-        //         history_i--;
-        //     }
-        //
-        //     history.resize(count);
-        // }
         void pushValue(T value) noexcept {
             history[history_i++] = value;
             debounce();
@@ -172,14 +142,12 @@ struct Graph {
                 lines[i * (3 + 4) + 0] = step * i; // x
                 lines[i * (3 + 4) + 1] = history[index] / max_y; // y
                 lines[i * (3 + 4) + 2] = 0.1f; // z
-                // std::cout << "Height = " << lines[i * (3 + 4) + 1] << '\n';
                 lines[i * (3 + 4) + 3] = 1.0f; // red
                 lines[i * (3 + 4) + 4] = 1.0f; // green
                 lines[i * (3 + 4) + 5] = 0.0f; // blue
                 lines[i * (3 + 4) + 6] = 1.0f; // alpha
                 index++;
             }
-            // std::cout << "==========" << '\n';
             glBindBuffer(GL_ARRAY_BUFFER, vbo);
             glBufferSubData(GL_ARRAY_BUFFER, size_background_bytes, size_lines_bytes, lines);
 
@@ -194,9 +162,6 @@ struct Graph {
             glDrawElements(GL_LINE_STRIP, history.size(), GL_UNSIGNED_INT, reinterpret_cast<const void*>(6 * sizeof(unsigned int))); // skip 2 triangles
         }
 };
-
-
-
 
 
 struct FieldSize {
@@ -346,10 +311,10 @@ struct Profiler {
     ProfilerDataType start;
     std::vector<std::string> mark_names;
 
-    static const unsigned int max_marks = 20;
-    static const unsigned int history_size = 500'000;
+    const unsigned int max_marks;
+    const unsigned int history_size;
 
-    Profiler() noexcept {
+    Profiler(unsigned int max_marks, unsigned int history_size) noexcept : max_marks(max_marks), history_size(history_size) {
         data.reserve(max_marks);
         mark_names.reserve(max_marks);
         for (unsigned int m = 0; m < max_marks; m++) {
@@ -376,7 +341,7 @@ struct Profiler {
             }
         }
         if (current_mark >= max_marks) {
-            std::cout << "Max marks count for Profiler reached: " << max_marks << '\n';
+            std::cout << "::> Max marks count for Profiler reached: " << max_marks << '\n';
             return 0;
         }
         auto& v = data[current_mark++];
@@ -409,6 +374,9 @@ struct Profiler {
 };
 
 
+GLFWwindow* init(unsigned int widht, unsigned int height);
+void processInput(GLFWwindow *window, float dt);
+
 int main() {
     std::cout << "========================== BEGIN =========================\n";
     GLFWwindow* window = init(global_state.width, global_state.height);
@@ -433,11 +401,10 @@ int main() {
     shader_basic.setUniformMat4f("u_MVP", mvp);
     shader_basic.setUniformMat4f("u_Model", Matrix4f::identity().translate(50.0f, 800.0f, 0.5f).scale(2300.0f, 200.0f, 1.0f));
 
-    // Graph<float> graph{15*60};
     Graph<float> graph{ 2 * 1024 };
     const float update_fps_every = 0.009f;
     float last_fps_update = 0.0f;
-    Profiler profiler;
+    Profiler profiler(20, 500'000);
 
     Graph<float> line_1{ 2*1024 };
     Graph<float> line_2{ 2*1024 };
@@ -522,8 +489,8 @@ int main() {
         const float avg_fps = 1.0f / avg_elapsed;
         const float min_fps = 1.0f / (*max_elapsed);
         const float max_fps = 1.0f / (*min_elapsed);
-        // std::cout << "Avg elapsed = " << avg_elapsed * 1000.0f << "[" << *min_elapsed * 1000.0f << ";" << *max_elapsed * 1000.0f << "] ms"
-        //     << "  Avg FPS = " << avg_fps << "[" << min_fps << ";" << max_fps << "]" << '\n';
+        std::cout << "Avg elapsed = " << avg_elapsed * 1000.0f << "[" << *min_elapsed * 1000.0f << ";" << *max_elapsed * 1000.0f << "] ms"
+            << "  Avg FPS = " << avg_fps << "[" << min_fps << ";" << max_fps << "]" << '\n';
 
         profiler.mark("regenerate start");
         if (last_time - change_every > last_change) {
@@ -589,51 +556,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {}
 
 
-GLFWwindow* init(unsigned int width, unsigned int height) {
-    if (!glfwInit()) {
-        std::cerr << ":> Failed at glfwInit()\n";
-        return nullptr;
-    }
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE); // For debug callback
-    glfwWindowHint(GLFW_SAMPLES, 1); // Multisampling(antialiasing): 1 == off
-
-    GLFWwindow* window = glfwCreateWindow(width, height, "Graph", NULL, NULL);
-    if (!window) {
-        std::cout << ":> Failed to create GLFWwindow" << '\n';
-        glfwTerminate();
-        return nullptr;
-    }
-    glfwSetWindowPos(window, 50, 50); // .., width, height from top-left corner
-
-    glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSwapInterval(0); // 0 -- unbounded (may have tearing), 1 -- almost vsync
-
-    if (glewInit() != GLEW_OK) {
-        std::cout << ":> Failed at glewInit()" << '\n';
-        return nullptr;
-    }
-
-    // Enable the debug callback
-    glEnable(GL_DEBUG_OUTPUT);
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-    glDebugMessageCallback(openglCallbackFunction, nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, true);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_DEPTH_TEST);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-    return window;
-}
 
 
 void APIENTRY openglCallbackFunction(
@@ -691,4 +613,51 @@ void APIENTRY openglCallbackFunction(
     }
     std::cout << '\n';
     std::cout << "---------------------opengl-callback-end--------------\n";
+}
+
+
+GLFWwindow* init(unsigned int width, unsigned int height) {
+    if (!glfwInit()) {
+        std::cerr << ":> Failed at glfwInit()\n";
+        return nullptr;
+    }
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE); // For debug callback
+    glfwWindowHint(GLFW_SAMPLES, 1); // Multisampling(antialiasing): 1 == off
+
+    GLFWwindow* window = glfwCreateWindow(width, height, "Graph", NULL, NULL);
+    if (!window) {
+        std::cout << ":> Failed to create GLFWwindow" << '\n';
+        glfwTerminate();
+        return nullptr;
+    }
+    glfwSetWindowPos(window, 0, 0); // .., width, height from top-left corner
+
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSwapInterval(0); // 0 -- unbounded (may have tearing), 1 -- almost vsync
+
+    if (glewInit() != GLEW_OK) {
+        std::cout << ":> Failed at glewInit()" << '\n';
+        return nullptr;
+    }
+
+    // Enable the debug callback
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glDebugMessageCallback(openglCallbackFunction, nullptr);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, true);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_DEPTH_TEST);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    return window;
 }
