@@ -18,8 +18,8 @@
 
 struct GlobalState {
     bool resize_recalculation_required = false;
-    unsigned int width = 1920;
-    unsigned int height = 1080;
+    unsigned int width = 1024;
+    unsigned int height = 1024;
     unsigned int mouse_x = 0;
     unsigned int mouse_y = 0;
     bool pause = false;
@@ -73,7 +73,7 @@ int main() {
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, size_bytes, data, GL_STATIC_DRAW);
     }
 
-    Shader shader("basic.vert", "basic.frag");
+    Shader shader("basic.vert", "field.frag");
     shader.bind();
     shader.setUniform2f("u_resolution", 1.0f * global_state.width, 1.0f * global_state.height);
 
@@ -104,7 +104,7 @@ int main() {
 
         shader.setUniform1f("u_time", current_time);
 
-        std::cout << "Delta time = " << delta_time * 1000.0 << "ms\n";
+        // std::cout << "Delta time = " << delta_time * 1000.0 << "ms\n";
     }
 
     glfwTerminate();
