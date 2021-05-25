@@ -30,6 +30,8 @@ static GlobalState global_state;
 GLFWwindow* init(unsigned int widht, unsigned int height);
 void processInput(GLFWwindow *window, float dt);
 
+void glfwErrorCallbackFunction(int error, const char* description);
+
 int main() {
     std::cout << "========================== BEGIN =========================\n";
     GLFWwindow* window = init(global_state.width, global_state.height);
@@ -204,6 +206,8 @@ void APIENTRY openglCallbackFunction(
 
 
 GLFWwindow* init(unsigned int width, unsigned int height) {
+    glfwSetErrorCallback(glfwErrorCallbackFunction);
+
     if (!glfwInit()) {
         std::cerr << ":> Failed at glfwInit()\n";
         return nullptr;
@@ -247,4 +251,11 @@ GLFWwindow* init(unsigned int width, unsigned int height) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     return window;
+}
+
+
+void glfwErrorCallbackFunction(int error, const char* description) {
+    std::cout << "A GLFW error [" << error << "] occured:\n";
+    std::cout << description << '\n';
+    std::cout << std::endl;
 }

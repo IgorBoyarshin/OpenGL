@@ -37,6 +37,8 @@ struct GlobalState {
 };
 static GlobalState global_state;
 
+void glfwErrorCallbackFunction(int error, const char* description);
+
 
 template<typename T>
 struct Graph {
@@ -617,6 +619,8 @@ void APIENTRY openglCallbackFunction(
 
 
 GLFWwindow* init(unsigned int width, unsigned int height) {
+    glfwSetErrorCallback(glfwErrorCallbackFunction);
+
     if (!glfwInit()) {
         std::cerr << ":> Failed at glfwInit()\n";
         return nullptr;
@@ -660,4 +664,11 @@ GLFWwindow* init(unsigned int width, unsigned int height) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     return window;
+}
+
+
+void glfwErrorCallbackFunction(int error, const char* description) {
+    std::cout << "A GLFW error [" << error << "] occured:\n";
+    std::cout << description << '\n';
+    std::cout << std::endl;
 }

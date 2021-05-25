@@ -45,6 +45,8 @@ void APIENTRY openglCallbackFunction(
         __attribute__((unused)) const void* userParam
 );
 
+void glfwErrorCallbackFunction(int error, const char* description);
+
 GLFWwindow* init(unsigned int widht, unsigned int height);
 void processInput(GLFWwindow *window, float dt);
 
@@ -300,6 +302,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {}
 
 
 GLFWwindow* init(unsigned int width, unsigned int height) {
+    glfwSetErrorCallback(glfwErrorCallbackFunction);
+
     if (!glfwInit()) {
         std::cerr << ":> Failed at glfwInit()\n";
         return nullptr;
@@ -401,4 +405,11 @@ void APIENTRY openglCallbackFunction(
     }
     std::cout << '\n';
     std::cout << "---------------------opengl-callback-end--------------\n";
+}
+
+
+void glfwErrorCallbackFunction(int error, const char* description) {
+    std::cout << "A GLFW error [" << error << "] occured:\n";
+    std::cout << description << '\n';
+    std::cout << std::endl;
 }
