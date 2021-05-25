@@ -196,8 +196,8 @@ int main() {
     Shader shader("tile.vert", "tile.frag");
     shader.bind();
 
-    const auto tile_size = 4; // pixels
-    const auto border = 1; // pixels
+    const auto tile_size = 7; // pixels
+    const auto border = 3; // pixels
     FieldSize field_size{ tile_size, border, global_state.width, global_state.height };
     std::vector<float> colors(3 * 4 * field_size.width * field_size.height);
     regenerateColors(colors);

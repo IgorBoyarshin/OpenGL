@@ -12,3 +12,10 @@ By binding a material it binds shader and its uniforms
 
 // GL_UNSIGNED_INT must be the same type as in IBO
 glDrawElements(GL_TRIANGLES, ibo.GetCount(), GL_UNSIGNED_INT, nullptr);
+
+
+
+By default, without any matrix transformations, OpenGL has the Z-axis (ranging -1..+1) pointing towards the screen, away from us.
+Thus, objects with lower z-value will be in front of those with larger z-value, and thus closer and so visible to us.
+
+On the other hand, orthographic projection maps the z-axis in the opposite direction (pointing from the screen towards us).
