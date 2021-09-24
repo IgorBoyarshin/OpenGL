@@ -19,3 +19,7 @@ By default, without any matrix transformations, OpenGL has the Z-axis (ranging -
 Thus, objects with lower z-value will be in front of those with larger z-value, and thus closer and so visible to us.
 
 On the other hand, orthographic projection maps the z-axis in the opposite direction (pointing from the screen towards us).
+
+
+==== stb_image.h usage ====
+Function stbi_load returns an array that has (rgb) tripplets row-by-row, top-to-bottom
