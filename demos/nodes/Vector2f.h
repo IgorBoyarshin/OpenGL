@@ -42,6 +42,13 @@ struct Vector2f {
         y /= l;
     }
 
+    Vector2f& normalized() noexcept {
+        const float l = length();
+        x /= l;
+        y /= l;
+        return *this;
+    }
+
     bool not_zero() noexcept {
         static constexpr float e = 0.0000001f;
         return (std::abs(x) > e) && (std::abs(y) > e);
@@ -54,6 +61,12 @@ struct Vector2f {
         return x*x + y*y;
     }
 };
+
+
+std::ostream& operator<<(std::ostream& stream, const Vector2f& v) noexcept {
+    stream << "[" << v.x << ";" << v.y << "]";
+    return stream;
+}
 
 
 #endif

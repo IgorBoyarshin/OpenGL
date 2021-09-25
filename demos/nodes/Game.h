@@ -7,7 +7,9 @@
 
 #include <cmath>
 #include <algorithm>
+#include <optional>
 #include <random>
+#include <limits>
 
 #include <GLFW/glfw3.h>
 
@@ -40,11 +42,20 @@ T getRandomUniformFloat(T low, T high) {
 
 
 Vector3f random_color() noexcept {
-    const float r = getRandomUniformFloat(0.1f, 1.0f);
-    const float g = getRandomUniformFloat(0.1f, 1.0f);
-    const float b = getRandomUniformFloat(0.1f, 1.0f);
+    const float r = getRandomUniformFloat(0.1f, 0.7f);
+    const float g = getRandomUniformFloat(0.1f, 0.7f);
+    const float b = getRandomUniformFloat(0.1f, 0.7f);
     return Vector3f{ r, g, b };
 }
+
+Vector3f pinned_color() noexcept {
+    return Vector3f{ 1.0f, 1.0f, 1.0f };
+}
+
+
+// float distance_sqr(const Vector2f& v1, const Vector2f& v2) const noexcept {
+//     return (v1 - v2).length_sqr();
+// }
 
 
 static constexpr unsigned int ID_MAX = 0xFFFFFFF;
@@ -53,34 +64,60 @@ static constexpr unsigned int ID_MAX = 0xFFFFFFF;
 static constexpr float NODE_SIZE = 8.0f;
 struct Node {
     unsigned int id;
+    bool is_pinned = true;
     Vector2f position;
-    Vector3f color;
+    Vector2f velocity = Vector2f{};
+    Vector3f color = pinned_color();
 
-    Node(const Vector2f& position) :
+    Node(const Vector2f& position) noexcept :
         id(getRandomUniformInt(static_cast<unsigned int>(0), ID_MAX)),
-        position(position),
-        color(random_color()) {}
+        position(position) {}
 
-    Node(Vector2f&& position) :
+    Node(Vector2f&& position) noexcept :
         id(getRandomUniformInt(static_cast<unsigned int>(0), ID_MAX)),
-        position(std::move(position)),
-        color(random_color()) {}
+        position(std::move(position)) {}
 
-    Node(unsigned int id, Vector2f&& position) :
+    Node(unsigned int id, Vector2f&& position) noexcept :
         id(id),
-        position(std::move(position)),
-        color(random_color()) {}
+        position(std::move(position)) {}
+
+    void pin() noexcept {
+        is_pinned = true;
+        velocity = Vector2f{};
+        color = pinned_color();
+    }
+
+    void unpin() noexcept {
+        is_pinned = false;
+        color = random_color();
+    }
+
+    void flip_pin() noexcept {
+        if (is_pinned) unpin();
+        else pin();
+    }
 };
 
 
 struct Line {
     unsigned int id1, id2;
 
-    Line(unsigned int id1, unsigned int id2) : id1(id1), id2(id2) {}
+    Line(unsigned int id1, unsigned int id2) noexcept : id1(id1), id2(id2) {}
+
+    unsigned int the_other(unsigned int id) const noexcept {
+        if (id == id1) return id2;
+        else if (id == id2) return id1;
+        else {
+            std::cout << "[ASSERTION]: cannot find the_other because " << id << " is not present \n";
+            assert(false);
+        }
+    }
 };
 
 
 struct World {
+    Vector2f world_size;
+
     std::vector<Node> nodes;
     // For Lines, assume every Line has unique Dots; this gives us a maximum
     // Dots count possible of twice the Lines amount.
@@ -95,6 +132,8 @@ struct World {
     unsigned int ibo_lines;
 
     unsigned int vao, vbo, ibo;
+
+    bool physics_is_on = false;
 
     static constexpr unsigned int node_vertex_components = 2 + 3 + 3; // inner_xy + x,y,z + color3
     static constexpr unsigned int indices_per_node = 6;
@@ -133,9 +172,28 @@ struct World {
         glDeleteVertexArrays(1, &vao_lines);
     }
 
-    void click(const Vector2f& pos) noexcept {
-        // std::cout << pos.x << " " << pos.y << '\n';
-        spawn_new(pos);
+    void restore_state() noexcept {
+        std::cout << "Restoring previous state\n";
+    }
+
+    void save_state() noexcept {
+        std::cout << "Saving current state\n";
+    }
+
+    void turn_physics_on() noexcept {
+        std::cout << "Physics: ON\n";
+        physics_is_on = true;
+    }
+
+    void turn_physics_off() noexcept {
+        std::cout << "Physics: OFF\n";
+        physics_is_on = false;
+    }
+
+    void flip_pin_at(const Vector2f& pos) noexcept {
+        const auto index_opt = index_of_node_closest_to(pos);
+        if (!index_opt) return;
+        nodes[*index_opt].flip_pin();
     }
 
     unsigned int pick_id_except_for(const std::vector<Node>& nodes, unsigned int forbidden_id) const noexcept {
@@ -148,15 +206,90 @@ struct World {
         }
     }
 
-    void spawn_new(const Vector2f& pos) noexcept {
+    void spawn_node(const Vector2f& pos) noexcept {
         // const float x = getRandomUniformFloat(10.0f, 90.0f);
         // const float y = getRandomUniformFloat(10.0f, 90.0f);
-        // const auto node = Node{ Vector2f{ x, y } };
-        const auto node = Node{ pos };
-        const unsigned int id1 = node.id;
-        const unsigned int id2 = pick_id_except_for(nodes, id1);
+        auto node = Node{ pos };
+        node.unpin();
         add_node(std::move(node));
-        add_line(Line{ id1, id2 });
+    }
+
+    void spawn_line(const Vector2f& pos1, const Vector2f& pos2) noexcept {
+        const auto n1_opt = index_of_node_closest_to(pos1);
+        const auto n2_opt = index_of_node_closest_to(pos2);
+        if (!n1_opt || !n2_opt) return;
+        const auto id1 = nodes[*n1_opt].id;
+        const auto id2 = nodes[*n2_opt].id;
+        if (id1 == id2) return;
+        for (const auto& line : lines) {
+            if ((line.id1 == id1 && line.id2 == id2) || (line.id1 == id2 && line.id2 == id1)) return;
+        }
+        add_line(Line(id1, id2));
+    }
+
+    void destroy_node(const Vector2f& pos) noexcept {
+        std::cout << "Destroying node " << '\n';
+        const auto index_node_opt = index_of_node_closest_to(pos);
+        if (!index_node_opt) return;
+        const unsigned int id = nodes[*index_node_opt].id;
+
+        // Remove all connected lines
+        std::cout << "Size before " << lines.size() << std::endl;
+        lines.erase(std::remove_if(lines.begin(), lines.end(), [id](const Line& line) {
+            return (line.id1 == id) || (line.id2 == id);
+        }), lines.end());
+        std::cout << "Size after " << lines.size() << std::endl;
+
+        // Remove the Node itself
+        nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [id](const Node& node) {
+            return node.id == id;
+        }), nodes.end());
+    }
+
+    void destroy_line(const Vector2f& pos1, const Vector2f& pos2) noexcept {
+        std::cout << "Destroying line " << '\n';
+        const auto index1_node_opt = index_of_node_closest_to(pos1);
+        const auto index2_node_opt = index_of_node_closest_to(pos2);
+        if (!index1_node_opt || !index2_node_opt) return;
+        const unsigned int id1 = nodes[*index1_node_opt].id;
+        const unsigned int id2 = nodes[*index2_node_opt].id;
+        lines.erase(std::remove_if(lines.begin(), lines.end(), [id1, id2](const Line& line) {
+            return ((line.id1 == id1) && (line.id2 == id2)) || ((line.id1 == id2) && (line.id2 == id1));
+        }), lines.end());
+    }
+
+    std::optional<unsigned int> index_of_node_closest_to(const Vector2f& pos) const noexcept {
+        constexpr float threshold = 5.0f;
+        int min_i = -1;
+        float min_dst = std::numeric_limits<float>::max();
+        for (unsigned int i = 0; i < nodes.size(); i++) {
+            const auto dst = (nodes[i].position - pos).length_sqr();
+            if (dst < min_dst && dst < threshold) {
+                min_dst = dst;
+                min_i = i;
+            }
+        }
+        if (min_i >= 0) {
+            return { static_cast<unsigned int>(min_i) };
+        }
+        return std::nullopt;
+    }
+
+    unsigned int index_of_node_with_id(unsigned int id) const noexcept {
+        for (unsigned int i = 0; i < nodes.size(); i++) {
+            if (nodes[i].id == id) return i;
+        }
+        std::cout << "[ASSERTION]: no Node with id = " << id << '\n';
+        assert(false);
+    }
+
+    std::vector<unsigned int> indices_of_lines_connected_to_node_id(unsigned int id) const noexcept {
+        std::vector<unsigned int> indices;
+        for (unsigned int i = 0; i < lines.size(); i++) {
+            const auto& line = lines[i];
+            if (line.id1 == id || line.id2 == id) indices.push_back(i);
+        }
+        return indices;
     }
 
     void prepare_nodes(unsigned int starting_capacity) {
@@ -261,7 +394,13 @@ struct World {
     }
 
     void update_and_render(float dt) noexcept {
-        do_physics(dt);
+        if (physics_is_on) {
+            do_physics(dt);
+            remove_distant_nodes();
+        }
+        resubmit_nodes_vertices();
+        resubmit_lines_vertices();
+
         render_lines();
         render_nodes();
     }
@@ -280,8 +419,64 @@ struct World {
         glBindVertexArray(0);
     }
 
-    void do_physics(float dt) noexcept {
+    bool is_too_distant(const Vector2f& pos) const noexcept {
+        // constexpr float dst = world_size
+        if (pos.x < -world_size.x) return true;
+        if (pos.x > 2 * world_size.x) return true;
+        if (pos.y < -world_size.y) return true;
+        if (pos.y > 2 * world_size.y) return true;
+        return false;
+    }
 
+    // NOTE Because this is a rare operation and because there is no harm in delaying the removal,
+    // this implementation makes at most 1 removal per function call.
+    void remove_distant_nodes() noexcept {
+        std::optional<unsigned int> removed_id = std::nullopt;
+        for (auto it = nodes.begin(); it != nodes.end(); ++it) {
+            if (is_too_distant(it->position)) {
+                std::cout << "Auto-removing Node " << it->id << " because it is too distant\n";
+                nodes.erase(it);
+                removed_id = { it->id };
+                break;
+            }
+        }
+
+        if (!removed_id) return;
+        // Remove all connected lines
+        const auto id = *removed_id;
+        lines.erase(std::remove_if(lines.begin(), lines.end(), [id](const Line& line) {
+            return (line.id1 == id) || (line.id2 == id);
+        }), lines.end());
+    }
+
+    // TODO improve from O(N2) by pair-calculationg the force
+    void do_physics(float dt) noexcept {
+        constexpr float G = 9.8f;
+        constexpr float K = 0.1f;
+        constexpr float scaler = 0.000002f;
+        const float t = scaler * dt;
+        for (auto& node : nodes) {
+            if (node.is_pinned) continue;
+            // std::cout << "Old position of node " << node.id << " is " << node.position << '\n';
+            // std::cout << "Old velocity of node " << node.id << " is " << node.velocity << '\n';
+
+            // Apply gravity to speed
+            node.velocity += Vector2f{ 0.0f, -1.0f } * (t * G);
+            // Apply springs to speed
+            for (unsigned int index : indices_of_lines_connected_to_node_id(node.id)) {
+                // std::cout << "Found line " << lines[index].id1 << " and " << lines[index].id2 << '\n';
+                const auto& other_node = nodes[index_of_node_with_id(lines[index].the_other(node.id))];
+                // std::cout << "Accounting for other node " << other_node.id << '\n';
+                // TODO can improve math:
+                const Vector2f force_dir = (other_node.position - node.position).normalized();
+                const Vector2f force = force_dir * (other_node.position - node.position).length_sqr();
+                node.velocity += force * (t * K);
+            }
+            // Apply speed to position
+            node.position += node.velocity * t;
+            std::cout << "New position of node " << node.id << " is " << node.position << '\n';
+            std::cout << "New velocity of node " << node.id << " is " << node.velocity << '\n';
+        }
     }
 
     // TODO @speed add nodes as a batch
@@ -479,13 +674,6 @@ struct World {
     void fill_lines_indices(unsigned int ibo_lines, const std::vector<Line>& lines) const noexcept {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_lines);
 
-        static const auto index_of_node_with_id = [this](unsigned int id){
-            for (unsigned int i = 0; i < nodes.size(); i++) {
-                if (nodes[i].id == id) return i;
-            }
-            std::cout << "[ASSERTION]: no Node with id = " << id << '\n';
-            assert(false);
-        };
         const auto count = lines.size() * indices_per_line;
         unsigned int data[count];
         for (unsigned int i = 0; i < lines.size(); i++) {
@@ -504,17 +692,13 @@ struct World {
         shader_line.bind();
         shader_line.setUniformMat4f("u_mvp", mvp);
     }
+
+    void set_size(const Vector2f& size) noexcept {
+        world_size = size;
+    }
 };
 
 
-
-// using InputType = unsigned int;
-// enum Input : InputType {
-//     MOVE_UP    = 1 << 1,
-//     MOVE_DOWN  = 1 << 2,
-//     MOVE_LEFT  = 1 << 3,
-//     MOVE_RIGHT = 1 << 4
-// };
 
 
 struct Game {
@@ -528,20 +712,13 @@ struct Game {
         Vector2f world_size;
         Vector2f window_size;
 
-        bool pressed_n = false;
+        bool pressed_s = false;
+        bool pressed_r = false;
         bool pressed_lmb = false;
-
-
-        void process_input(float dt) noexcept {
-            // int delta_x = 0;
-            // int delta_y = 0;
-            // if (input & Input::MOVE_LEFT ) delta_x -= 1;
-            // if (input & Input::MOVE_RIGHT) delta_x += 1;
-            // if (input & Input::MOVE_UP   ) delta_y += 1;
-            // if (input & Input::MOVE_DOWN ) delta_y -= 1;
-
-            // input = 0; // reset
-        }
+        bool pressed_rmb = false;
+        bool pressed_mmb = false;
+        bool pressed_space = false;
+        bool physics_on = false;
 
         static Matrix4f mvp_for_world_size(const Vector2f& world_size) noexcept {
             return Matrix4f::orthographic(0.0f, world_size.x, 0.0f, world_size.y, -1.0f, 1.0f);
@@ -555,6 +732,12 @@ struct Game {
             return Vector2f{ cursor.x / window_size.x * world_size.x, world_size.y - cursor.y / window_size.y * world_size.y };
         }
 
+        static Vector2f get_cursor(GLFWwindow* window) noexcept {
+            double xpos, ypos;
+            glfwGetCursorPos(window, &xpos, &ypos);
+            return Vector2f{ static_cast<float>(xpos), static_cast<float>(ypos) };
+        }
+
     public:
         Game(unsigned int width, unsigned int height) noexcept {
             window_size = Vector2f{ 1.0f * width, 1.0f * height };
@@ -562,37 +745,100 @@ struct Game {
             world_size = world_size_for_aspect(aspect_w_h);
             mvp = mvp_for_world_size(world_size);
             world.set_mvp(mvp);
+            world.set_size(world_size);
         }
 
         void update_and_render(float dt) noexcept {
-            process_input(dt);
             world.update_and_render(dt);
         }
 
         void register_input(GLFWwindow* window) noexcept {
             if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) game_should_close = true;
 
-            // if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) input |= Input::MOVE_UP;
-            // if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) input |= Input::MOVE_DOWN;
-            // if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) input |= Input::MOVE_LEFT;
-            // if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) input |= Input::MOVE_RIGHT;
+            if (!pressed_r && (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)) {
+                pressed_r = true;
+                world.restore_state();
+            }
+            if (pressed_r && (glfwGetKey(window, GLFW_KEY_R) == GLFW_RELEASE)) {
+                pressed_r = false;
+            }
 
-            // if (!pressed_n && (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS)) {
-            //     pressed_n = true;
-                // world.spawn_new();
-            // }
-            // if (pressed_n && (glfwGetKey(window, GLFW_KEY_N) == GLFW_RELEASE)) {
-            //     pressed_n = false;
-            // }
+            if (!pressed_s && (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)) {
+                pressed_s = true;
+                world.save_state();
+            }
+            if (pressed_s && (glfwGetKey(window, GLFW_KEY_S) == GLFW_RELEASE)) {
+                pressed_s = false;
+            }
 
+            if (!pressed_space && (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)) {
+                pressed_space = true;
+                if (physics_on) {
+                    physics_on = false;
+                    world.turn_physics_off();
+                } else {
+                    physics_on = true;
+                    world.turn_physics_on();
+                }
+            }
+            if (pressed_space && (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)) {
+                pressed_space = false;
+            }
+
+            static std::optional<Vector2f> memorized_coord = std::nullopt;
             if (!pressed_lmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
                 pressed_lmb = true;
-                double xpos, ypos;
-                glfwGetCursorPos(window, &xpos, &ypos);
-                world.click(cursor_to_world_coord(Vector2f{ static_cast<float>(xpos), static_cast<float>(ypos) }));
+
+                const auto coord = cursor_to_world_coord(get_cursor(window));
+                if (world.index_of_node_closest_to(coord)) {
+                    memorized_coord = { coord };
+                } else {
+                    world.spawn_node(coord);
+                    memorized_coord = std::nullopt;
+                }
             }
             if (pressed_lmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) {
                 pressed_lmb = false;
+
+                if (memorized_coord) {
+                    const auto coord2 = cursor_to_world_coord(get_cursor(window));
+                    world.spawn_line(*memorized_coord, coord2);
+                }
+            }
+
+            if (!pressed_rmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+                pressed_rmb = true;
+
+                const auto coord = cursor_to_world_coord(get_cursor(window));
+                if (world.index_of_node_closest_to(coord)) {
+                    memorized_coord = { coord };
+                } else {
+                    memorized_coord = std::nullopt;
+                }
+            }
+            if (pressed_rmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
+                pressed_rmb = false;
+
+                if (memorized_coord) { // first point is a Node
+                    const auto coord2 = cursor_to_world_coord(get_cursor(window));
+                    const auto index2 = world.index_of_node_closest_to(coord2);
+                    if (index2) { // second point also is a Node
+                        const auto index1 = world.index_of_node_closest_to(*memorized_coord);
+                        if (*index1 == *index2) { // same Node
+                            world.destroy_node(coord2);
+                        } else { // different Nodes
+                            world.destroy_line(*memorized_coord, coord2);
+                        }
+                    }
+                }
+            }
+
+            if (!pressed_mmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+                pressed_mmb = true;
+                world.flip_pin_at(cursor_to_world_coord(get_cursor(window)));
+            }
+            if (pressed_mmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_RELEASE) {
+                pressed_mmb = false;
             }
         }
 
