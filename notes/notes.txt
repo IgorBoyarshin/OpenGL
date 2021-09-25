@@ -23,3 +23,7 @@ On the other hand, orthographic projection maps the z-axis in the opposite direc
 
 ==== stb_image.h usage ====
 Function stbi_load returns an array that has (rgb) tripplets row-by-row, top-to-bottom
+
+
+VertexAttribArray's are bound to the specific ARRAY_BUFFER (vbo)!!!
+So upon recreation of an VBO, you mus specify the VertexAttribArray once again!!!

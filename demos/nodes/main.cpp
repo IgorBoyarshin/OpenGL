@@ -49,10 +49,10 @@ int main() {
         // std::cout << "Loop delta time = " << std::setw(5) << delta_time << " micros\n";
 
         glfwPollEvents();
-        if (global_state.mouse_updated) {
-            global_state.mouse_updated = false;
-            game.register_mouse(global_state.mouse_x, global_state.mouse_y);
-        }
+        // if (global_state.mouse_updated) {
+        //     global_state.mouse_updated = false;
+        //     game.register_mouse(global_state.mouse_x, global_state.mouse_y);
+        // }
         game.register_input(window);
         if (game.should_close()) glfwSetWindowShouldClose(window, true);
 
@@ -87,17 +87,20 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     global_state.height = height;
 }
 
-void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    // if (xpos < 0) xpos = 0;
-    // if (xpos >= global_state.width) xpos = global_state.width;
-    // if (ypos < 0) ypos = 0;
-    // if (ypos >= global_state.height) ypos = global_state.height;
-    global_state.mouse_updated = true;
-    global_state.mouse_x = xpos;
-    global_state.mouse_y = ypos;
-    // global_state.mouse_y = global_state.height - ypos;
-}
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {}
+// void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+//     // if (xpos < 0) xpos = 0;
+//     // if (xpos >= global_state.width) xpos = global_state.width;
+//     // if (ypos < 0) ypos = 0;
+//     // if (ypos >= global_state.height) ypos = global_state.height;
+//     global_state.mouse_updated = true;
+//     global_state.mouse_x = xpos;
+//     global_state.mouse_y = ypos;
+//     // global_state.mouse_y = global_state.height - ypos;
+// }
+
+// void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {}
+
+// void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {}
 
 
 
@@ -182,8 +185,9 @@ GLFWwindow* init(unsigned int width, unsigned int height) {
 
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
+    // glfwSetMouseButtonCallback(window, mouse_button_callback);
+    // glfwSetCursorPosCallback(window, mouse_callback);
+    // glfwSetScrollCallback(window, scroll_callback);
     // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSwapInterval(1); // 0 -- unbounded (may have tearing), 1 -- almost vsync
 

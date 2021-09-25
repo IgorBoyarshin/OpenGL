@@ -56,6 +56,11 @@ struct Node {
     Vector2f position;
     Vector3f color;
 
+    Node(const Vector2f& position) :
+        id(getRandomUniformInt(static_cast<unsigned int>(0), ID_MAX)),
+        position(position),
+        color(random_color()) {}
+
     Node(Vector2f&& position) :
         id(getRandomUniformInt(static_cast<unsigned int>(0), ID_MAX)),
         position(std::move(position)),
@@ -76,8 +81,6 @@ struct Line {
 
 
 struct World {
-    // const float size_x, size_y;
-
     std::vector<Node> nodes;
     // For Lines, assume every Line has unique Dots; this gives us a maximum
     // Dots count possible of twice the Lines amount.
@@ -114,8 +117,8 @@ struct World {
 
     World() {
         glLineWidth(5.0f);
-        const auto lines_starting_capacity = 16;
-        const auto nodes_starting_capacity = 16;
+        const auto lines_starting_capacity = 8;
+        const auto nodes_starting_capacity = 8;
         prepare_nodes(nodes_starting_capacity);
         prepare_lines(nodes_starting_capacity, lines_starting_capacity);
         add_sample_grid();
@@ -128,6 +131,32 @@ struct World {
         glDeleteBuffers(1, &ibo_lines);
         glDeleteBuffers(1, &vbo_lines);
         glDeleteVertexArrays(1, &vao_lines);
+    }
+
+    void click(const Vector2f& pos) noexcept {
+        // std::cout << pos.x << " " << pos.y << '\n';
+        spawn_new(pos);
+    }
+
+    unsigned int pick_id_except_for(const std::vector<Node>& nodes, unsigned int forbidden_id) const noexcept {
+        if (nodes.size() <= 1) return -1;
+        const unsigned int start = getRandomUniformInt(static_cast<unsigned int>(0), static_cast<unsigned int>(nodes.size()));
+        for (unsigned int i = start;; i++) {
+            if (i == nodes.size()) i = 0;
+            if (nodes[i].id == forbidden_id) continue;
+            return nodes[i].id;
+        }
+    }
+
+    void spawn_new(const Vector2f& pos) noexcept {
+        // const float x = getRandomUniformFloat(10.0f, 90.0f);
+        // const float y = getRandomUniformFloat(10.0f, 90.0f);
+        // const auto node = Node{ Vector2f{ x, y } };
+        const auto node = Node{ pos };
+        const unsigned int id1 = node.id;
+        const unsigned int id2 = pick_id_except_for(nodes, id1);
+        add_node(std::move(node));
+        add_line(Line{ id1, id2 });
     }
 
     void prepare_nodes(unsigned int starting_capacity) {
@@ -143,30 +172,7 @@ struct World {
             const float* data = 0;
             glBufferData(GL_ARRAY_BUFFER, size_bytes, data, GL_DYNAMIC_DRAW);
 
-            {
-                const auto index = 0;
-                glEnableVertexAttribArray(index);
-                const auto floats_per_vertex = 2; // inner_xy
-                const auto stride_bytes = node_vertex_components * sizeof(float);
-                const auto offset_bytes = 0;
-                glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
-            }
-            {
-                const auto index = 1;
-                glEnableVertexAttribArray(index);
-                const auto floats_per_vertex = 3; // x, y, z
-                const auto stride_bytes = node_vertex_components * sizeof(float);
-                const auto offset_bytes = 2 * sizeof(float); // skip inner_xy
-                glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
-            }
-            {
-                const auto index = 2;
-                glEnableVertexAttribArray(index);
-                const auto floats_per_vertex = 3; // color3
-                const auto stride_bytes = node_vertex_components * sizeof(float);
-                const auto offset_bytes = (2 + 3) * sizeof(float); // skip inner_xy and x,y,z
-                glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
-            }
+            specify_attribs_for_nodes(); // proper GL_ARRAY_BUFFER must be bound!
         }
 
         fill_nodes_indices_for_capacity(ibo_nodes, nodes.capacity());
@@ -190,28 +196,59 @@ struct World {
             const float* data = 0;
             glBufferData(GL_ARRAY_BUFFER, size_bytes, data, GL_DYNAMIC_DRAW);
 
-            {
-                const auto index = 0;
-                glEnableVertexAttribArray(index);
-                const auto floats_per_vertex = 3; // x, y, z
-                const auto stride_bytes = dot_vertex_components * sizeof(float);
-                const auto offset_bytes = 0;
-                glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
-            }
-            {
-                const auto index = 1;
-                glEnableVertexAttribArray(index);
-                const auto floats_per_vertex = 3; // color3
-                const auto stride_bytes = dot_vertex_components * sizeof(float);
-                const auto offset_bytes = 3 * sizeof(float); // skip x,y,z
-                glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
-            }
+            specify_attribs_for_lines(); // proper GL_ARRAY_BUFFER must be bound!
         }
 
         // The filling will be done upon Line addition
         allocate_lines_indices_for_capacity(ibo_lines, lines.capacity());
 
         glBindVertexArray(0);
+    }
+
+    void specify_attribs_for_nodes() const noexcept {
+        {
+            const auto index = 0;
+            glEnableVertexAttribArray(index);
+            const auto floats_per_vertex = 2; // inner_xy
+            const auto stride_bytes = node_vertex_components * sizeof(float);
+            const auto offset_bytes = 0;
+            glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+        }
+        {
+            const auto index = 1;
+            glEnableVertexAttribArray(index);
+            const auto floats_per_vertex = 3; // x, y, z
+            const auto stride_bytes = node_vertex_components * sizeof(float);
+            const auto offset_bytes = 2 * sizeof(float); // skip inner_xy
+            glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+        }
+        {
+            const auto index = 2;
+            glEnableVertexAttribArray(index);
+            const auto floats_per_vertex = 3; // color3
+            const auto stride_bytes = node_vertex_components * sizeof(float);
+            const auto offset_bytes = (2 + 3) * sizeof(float); // skip inner_xy and x,y,z
+            glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+        }
+    }
+
+    void specify_attribs_for_lines() const noexcept {
+        {
+            const auto index = 0;
+            glEnableVertexAttribArray(index);
+            const auto floats_per_vertex = 3; // x, y, z
+            const auto stride_bytes = dot_vertex_components * sizeof(float);
+            const auto offset_bytes = 0;
+            glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+        }
+        {
+            const auto index = 1;
+            glEnableVertexAttribArray(index);
+            const auto floats_per_vertex = 3; // color3
+            const auto stride_bytes = dot_vertex_components * sizeof(float);
+            const auto offset_bytes = 3 * sizeof(float); // skip x,y,z
+            glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+        }
     }
 
     void add_sample_grid() noexcept {
@@ -270,6 +307,7 @@ struct World {
                 glBufferData(GL_ARRAY_BUFFER, size_bytes, data, GL_DYNAMIC_DRAW);
                 // Refill the old part of VBO
                 resubmit_nodes_vertices();
+                specify_attribs_for_nodes(); // proper GL_ARRAY_BUFFER must be bound!
             }
 
             glBindVertexArray(vao_lines);
@@ -283,37 +321,37 @@ struct World {
                 glBufferData(GL_ARRAY_BUFFER, size_bytes, data, GL_DYNAMIC_DRAW);
                 // Refill the old part of VBO
                 resubmit_lines_vertices();
+                specify_attribs_for_lines(); // proper GL_ARRAY_BUFFER must be bound!
             }
             glBindVertexArray(0);
-        }
+        } else {
+            // Append the Node part
+            {
+                glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
+                const unsigned int skip_size_bytes = (nodes.size() - 1) * vertices_per_node * node_vertex_components * sizeof(float);
+                const float half_size = 0.5f * NODE_SIZE;
+                const float z = z_nodes + z_delta * (nodes.size() - 1);
+                const float data[vertices_per_node * node_vertex_components] = {
+                    -1.0f, -1.0f, node.position.x - half_size, node.position.y - half_size, z, node.color.x, node.color.y, node.color.z,
+                    -1.0f, +1.0f, node.position.x - half_size, node.position.y + half_size, z, node.color.x, node.color.y, node.color.z,
+                    +1.0f, +1.0f, node.position.x + half_size, node.position.y + half_size, z, node.color.x, node.color.y, node.color.z,
+                    +1.0f, -1.0f, node.position.x + half_size, node.position.y - half_size, z, node.color.x, node.color.y, node.color.z
+                };
+                const unsigned int data_size_bytes = vertices_per_node * node_vertex_components * sizeof(data[0]);
+                glBufferSubData(GL_ARRAY_BUFFER, skip_size_bytes, data_size_bytes, data);
+            }
 
-
-        // Append the Node part
-        {
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
-            const unsigned int skip_size_bytes = (nodes.size() - 1) * vertices_per_node * node_vertex_components * sizeof(float);
-            const float half_size = 0.5f * NODE_SIZE;
-            const float z = z_nodes + z_delta * (nodes.size() - 1);
-            const float data[vertices_per_node * node_vertex_components] = {
-                -1.0f, -1.0f, node.position.x - half_size, node.position.y - half_size, z, node.color.x, node.color.y, node.color.z,
-                -1.0f, +1.0f, node.position.x - half_size, node.position.y + half_size, z, node.color.x, node.color.y, node.color.z,
-                +1.0f, +1.0f, node.position.x + half_size, node.position.y + half_size, z, node.color.x, node.color.y, node.color.z,
-                +1.0f, -1.0f, node.position.x + half_size, node.position.y - half_size, z, node.color.x, node.color.y, node.color.z
-            };
-            const unsigned int data_size_bytes = vertices_per_node * node_vertex_components * sizeof(data[0]);
-            glBufferSubData(GL_ARRAY_BUFFER, skip_size_bytes, data_size_bytes, data);
-        }
-
-        // Append the Dot part
-        {
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_lines);
-            const unsigned int skip_size_bytes = (nodes.size() - 1) * dot_vertex_components * sizeof(float);
-            const float z = z_lines + z_delta * (nodes.size() - 1);
-            const float data[dot_vertex_components] = {
-                node.position.x, node.position.y, z, node.color.x, node.color.y, node.color.z
-            };
-            const unsigned int data_size_bytes = dot_vertex_components * sizeof(data[0]);
-            glBufferSubData(GL_ARRAY_BUFFER, skip_size_bytes, data_size_bytes, data);
+            // Append the Dot part
+            {
+                glBindBuffer(GL_ARRAY_BUFFER, vbo_lines);
+                const unsigned int skip_size_bytes = (nodes.size() - 1) * dot_vertex_components * sizeof(float);
+                const float z = z_lines + z_delta * (nodes.size() - 1);
+                const float data[dot_vertex_components] = {
+                    node.position.x, node.position.y, z, node.color.x, node.color.y, node.color.z
+                };
+                const unsigned int data_size_bytes = dot_vertex_components * sizeof(data[0]);
+                glBufferSubData(GL_ARRAY_BUFFER, skip_size_bytes, data_size_bytes, data);
+            }
         }
     }
 
@@ -470,46 +508,39 @@ struct World {
 
 
 
-using InputType = unsigned int;
-enum Input : InputType {
-    MOVE_UP    = 1 << 1,
-    MOVE_DOWN  = 1 << 2,
-    MOVE_LEFT  = 1 << 3,
-    MOVE_RIGHT = 1 << 4
-};
+// using InputType = unsigned int;
+// enum Input : InputType {
+//     MOVE_UP    = 1 << 1,
+//     MOVE_DOWN  = 1 << 2,
+//     MOVE_LEFT  = 1 << 3,
+//     MOVE_RIGHT = 1 << 4
+// };
 
 
 struct Game {
     private:
         bool game_should_close = false;
-        InputType input;
+        // InputType input;
 
         World world;
-        // static constexpr unsigned int map_texture_id = 0;
-        // static constexpr float map_z      = 0.0f;
-        // static constexpr float entities_z = 0.3f;
         Matrix4f mvp;
         static constexpr float world_size_y = 100.0f;
         Vector2f world_size;
+        Vector2f window_size;
+
+        bool pressed_n = false;
+        bool pressed_lmb = false;
 
 
         void process_input(float dt) noexcept {
-            int delta_x = 0;
-            int delta_y = 0;
-            if (input & Input::MOVE_LEFT ) delta_x -= 1;
-            if (input & Input::MOVE_RIGHT) delta_x += 1;
-            if (input & Input::MOVE_UP   ) delta_y += 1;
-            if (input & Input::MOVE_DOWN ) delta_y -= 1;
+            // int delta_x = 0;
+            // int delta_y = 0;
+            // if (input & Input::MOVE_LEFT ) delta_x -= 1;
+            // if (input & Input::MOVE_RIGHT) delta_x += 1;
+            // if (input & Input::MOVE_UP   ) delta_y += 1;
+            // if (input & Input::MOVE_DOWN ) delta_y -= 1;
 
-            // const int magnitude = std::abs(delta_x) + std::abs(delta_y);
-            // if (magnitude > 0) {
-            //     static constexpr float one_over_sqrt_2 = 1.0f / 1.41421356f;
-            //     const float step = dt * ((magnitude == 2) ? one_over_sqrt_2 : 1.0f);
-            //     const Vector2f direction{ delta_x * step, delta_y * step };
-            //     world.move_first_entity_in_direction(direction);
-            // }
-
-            input = 0; // reset
+            // input = 0; // reset
         }
 
         static Matrix4f mvp_for_world_size(const Vector2f& world_size) noexcept {
@@ -520,35 +551,18 @@ struct Game {
             return Vector2f{ world_size_y * aspect_w_h, world_size_y };
         }
 
-        // static Vector2f camera_centered_on(const Vector2f& position, const Vector2f& world_size) noexcept {
-        //     return position - world_size / 2.0f;
-        // }
+        Vector2f cursor_to_world_coord(const Vector2f& cursor) const noexcept {
+            return Vector2f{ cursor.x / window_size.x * world_size.x, world_size.y - cursor.y / window_size.y * world_size.y };
+        }
 
     public:
         Game(unsigned int width, unsigned int height) noexcept {
+            window_size = Vector2f{ 1.0f * width, 1.0f * height };
             const float aspect_w_h = static_cast<float>(width) / static_cast<float>(height);
             world_size = world_size_for_aspect(aspect_w_h);
             mvp = mvp_for_world_size(world_size);
             world.set_mvp(mvp);
-            // world.set_frame_size(world_size);
         }
-
-        // Game(unsigned int width, unsigned int height) noexcept :
-        //         world(World(entities_z, map_z, map_texture_id)) {
-        //     const float aspect_w_h = static_cast<float>(width) / static_cast<float>(height);
-        //     world_size = world_size_for_aspect(aspect_w_h);
-        //     mvp = mvp_for_world_size(world_size);
-        //     world.set_mvp(mvp);
-        //     world.set_frame_size(world_size);
-        //
-        //     const Vector2f position{ 1.0f, 1.0f };
-        //     const Entity my_entity{.position = position, .size = 1.0f, .color = Vector3f{ 0.5f, 0.1f, 0.9f } };
-        //     world.add_entity(my_entity); // our Entity will always be at index zero
-        //     world.add_entity(Entity{.position = Vector2f{ 5.0f, 3.0f }, .size = 2.0f, .color = Vector3f{ 0.1f, 0.5f, 0.1f } });
-        //     world.add_entity(Entity{.position = Vector2f{ 13.0f, 2.0f }, .size = 2.5f, .color = Vector3f{ 0.9f, 0.5f, 0.1f } });
-        //     world.add_entity(Entity{.position = Vector2f{ 1.1f, 4.0f }, .size = 0.4f, .color = Vector3f{ 0.1f, 0.5f, 0.1f } });
-        //     world.add_entity(Entity{.position = Vector2f{ 1.1f, 11.0f }, .size = 0.5f, .color = Vector3f{ 0.1f, 0.9f, 0.1f } });
-        // }
 
         void update_and_render(float dt) noexcept {
             process_input(dt);
@@ -558,20 +572,38 @@ struct Game {
         void register_input(GLFWwindow* window) noexcept {
             if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) game_should_close = true;
 
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) input |= Input::MOVE_UP;
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) input |= Input::MOVE_DOWN;
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) input |= Input::MOVE_LEFT;
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) input |= Input::MOVE_RIGHT;
+            // if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) input |= Input::MOVE_UP;
+            // if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) input |= Input::MOVE_DOWN;
+            // if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) input |= Input::MOVE_LEFT;
+            // if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) input |= Input::MOVE_RIGHT;
+
+            // if (!pressed_n && (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS)) {
+            //     pressed_n = true;
+                // world.spawn_new();
+            // }
+            // if (pressed_n && (glfwGetKey(window, GLFW_KEY_N) == GLFW_RELEASE)) {
+            //     pressed_n = false;
+            // }
+
+            if (!pressed_lmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+                pressed_lmb = true;
+                double xpos, ypos;
+                glfwGetCursorPos(window, &xpos, &ypos);
+                world.click(cursor_to_world_coord(Vector2f{ static_cast<float>(xpos), static_cast<float>(ypos) }));
+            }
+            if (pressed_lmb && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) {
+                pressed_lmb = false;
+            }
         }
 
         void register_mouse(float x, float y) noexcept {}
 
         void reset_dimensions(unsigned int width, unsigned int height) noexcept {
+            window_size = Vector2f{ 1.0f * width, 1.0f * height };
             const float aspect_w_h = static_cast<float>(width) / static_cast<float>(height);
             world_size = world_size_for_aspect(aspect_w_h);
             mvp = mvp_for_world_size(world_size);
             world.set_mvp(mvp);
-            // world.set_frame_size(world_size);
         }
 
         bool should_close() const noexcept {
