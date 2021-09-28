@@ -24,6 +24,11 @@ struct Vector2f {
         y += other.y;
     }
 
+    void operator*=(const float f) noexcept {
+        x *= f;
+        y *= f;
+    }
+
     Vector2f operator*(const float f) const noexcept {
         return Vector2f{ x * f, y * f};
     }

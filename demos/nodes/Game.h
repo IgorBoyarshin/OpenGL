@@ -48,33 +48,36 @@ Vector3f random_color() noexcept {
     return Vector3f{ r, g, b };
 }
 
+unsigned int random_id() noexcept {
+    static unsigned int next = 4;
+    return next++;
+    // return getRandomUniformInt(static_cast<unsigned int>(0), ID_MAX);
+}
+
 Vector3f pinned_color() noexcept {
     return Vector3f{ 1.0f, 1.0f, 1.0f };
 }
 
 
-// float distance_sqr(const Vector2f& v1, const Vector2f& v2) const noexcept {
-//     return (v1 - v2).length_sqr();
-// }
-
-
 static constexpr unsigned int ID_MAX = 0xFFFFFFF;
 
 
-static constexpr float NODE_SIZE = 8.0f;
+static constexpr float NODE_SIZE = 5.0f;
 struct Node {
     unsigned int id;
-    bool is_pinned = true;
+    bool is_pinned = false;
     Vector2f position;
+    // Vector2f prev_position = Vector2f{};
+    // bool just_woken_up = true;
     Vector2f velocity = Vector2f{};
-    Vector3f color = pinned_color();
+    Vector3f color = is_pinned ? pinned_color() : random_color();
 
     Node(const Vector2f& position) noexcept :
-        id(getRandomUniformInt(static_cast<unsigned int>(0), ID_MAX)),
+        id(random_id()),
         position(position) {}
 
     Node(Vector2f&& position) noexcept :
-        id(getRandomUniformInt(static_cast<unsigned int>(0), ID_MAX)),
+        id(random_id()),
         position(std::move(position)) {}
 
     Node(unsigned int id, Vector2f&& position) noexcept :
@@ -83,6 +86,7 @@ struct Node {
 
     void pin() noexcept {
         is_pinned = true;
+        // just_woken_up = true;
         velocity = Vector2f{};
         color = pinned_color();
     }
@@ -139,20 +143,18 @@ struct World {
     static constexpr unsigned int indices_per_node = 6;
     static constexpr unsigned int vertices_per_node = 4;
     unsigned int last_known_nodes_capacity;
-    // bool nodes_changed = false;
 
     static constexpr unsigned int dot_vertex_components = 3 + 3; // x,y,z + color3
     static constexpr auto indices_per_line = 2;
     static constexpr unsigned int vertices_per_dot = 2;
     unsigned int last_known_lines_capacity;
-    // bool lines_changed = false;
 
     Shader shader_node{"node.vert", "node.frag"};
     Shader shader_line{"line.vert", "line.frag"};
     static constexpr float z_nodes = 0.3f;
     static constexpr float z_lines = 0.2f;
-
     static constexpr float z_delta = 0.00001f;
+
 
     World() {
         glLineWidth(5.0f);
@@ -207,8 +209,6 @@ struct World {
     }
 
     void spawn_node(const Vector2f& pos) noexcept {
-        // const float x = getRandomUniformFloat(10.0f, 90.0f);
-        // const float y = getRandomUniformFloat(10.0f, 90.0f);
         auto node = Node{ pos };
         node.unpin();
         add_node(std::move(node));
@@ -232,18 +232,34 @@ struct World {
         const auto index_node_opt = index_of_node_closest_to(pos);
         if (!index_node_opt) return;
         const unsigned int id = nodes[*index_node_opt].id;
+        std::cout << " with id = " << id << '\n';
 
         // Remove all connected lines
-        std::cout << "Size before " << lines.size() << std::endl;
-        lines.erase(std::remove_if(lines.begin(), lines.end(), [id](const Line& line) {
+        // std::cout << "Size before " << lines.size() << std::endl;
+        // for (const auto& line : lines) {
+        //     if ((line.id1 == id) || (line.id2 == id)) {
+        //         std::cout << "Must remove line with ids = " << line.id1 << " and " << line.id2 << '\n';
+        //     } else {
+        //         std::cout << "Will leave line with ids = " << line.id1 << " and " << line.id2 << '\n';
+        //     }
+        // }
+        lines.erase(std::remove_if(lines.begin(), lines.end(), [&id](const Line& line) {
             return (line.id1 == id) || (line.id2 == id);
         }), lines.end());
-        std::cout << "Size after " << lines.size() << std::endl;
+        // for (const auto& line : lines) {
+            // std::cout << "Line remained with ids = " << line.id1 << " and " << line.id2 << '\n';
+        // }
+        // std::cout << "Size after " << lines.size() << std::endl;
 
         // Remove the Node itself
-        nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [id](const Node& node) {
+        nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [&id](const Node& node) {
             return node.id == id;
         }), nodes.end());
+        // for (const auto& node : nodes) {
+        //     std::cout << "Remaining nodes with id = " << node.id << '\n';
+        // }
+        std::cout << '\n';
+        std::cout << '\n';
     }
 
     void destroy_line(const Vector2f& pos1, const Vector2f& pos2) noexcept {
@@ -253,13 +269,19 @@ struct World {
         if (!index1_node_opt || !index2_node_opt) return;
         const unsigned int id1 = nodes[*index1_node_opt].id;
         const unsigned int id2 = nodes[*index2_node_opt].id;
+        std::cout << " with ids = " << id1 << " and " << id2 << '\n';
         lines.erase(std::remove_if(lines.begin(), lines.end(), [id1, id2](const Line& line) {
             return ((line.id1 == id1) && (line.id2 == id2)) || ((line.id1 == id2) && (line.id2 == id1));
         }), lines.end());
+        for (const auto& line : lines) {
+            std::cout << "Line remained with ids = " << line.id1 << " and " << line.id2 << '\n';
+        }
+        std::cout << '\n';
+        std::cout << '\n';
     }
 
     std::optional<unsigned int> index_of_node_closest_to(const Vector2f& pos) const noexcept {
-        constexpr float threshold = 5.0f;
+        constexpr float threshold = 6.0f;
         int min_i = -1;
         float min_dst = std::numeric_limits<float>::max();
         for (unsigned int i = 0; i < nodes.size(); i++) {
@@ -396,10 +418,10 @@ struct World {
     void update_and_render(float dt) noexcept {
         if (physics_is_on) {
             do_physics(dt);
-            remove_distant_nodes();
         }
         resubmit_nodes_vertices();
         resubmit_lines_vertices();
+        fill_lines_indices(ibo_lines, lines);
 
         render_lines();
         render_nodes();
@@ -419,24 +441,79 @@ struct World {
         glBindVertexArray(0);
     }
 
-    bool is_too_distant(const Vector2f& pos) const noexcept {
-        // constexpr float dst = world_size
-        if (pos.x < -world_size.x) return true;
-        if (pos.x > 2 * world_size.x) return true;
-        if (pos.y < -world_size.y) return true;
-        if (pos.y > 2 * world_size.y) return true;
-        return false;
+    void do_physics(float dt) noexcept {
+        // verlet(dt);
+        springs_physics(dt);
     }
+
+    // void verlet(float dt) noexcept {
+    //     constexpr float time_scaler = 0.000002f;
+    //     const float t = time_scaler * dt;
+    //
+    //     for (auto& node : nodes) {
+    //         if (node.is_pinned) continue;
+    //         if (node.just_woken_up) {
+    //             node.just_woken_up = false;
+    //
+    //             constexpr float box = 0.05f * NODE_SIZE;
+    //             const auto x = node.position.x;
+    //             const auto y = node.position.y;
+    //             const auto dx = getRandomUniformFloat(0.0f, 2.0f * box);
+    //             const auto dy = getRandomUniformFloat(0.0f, 2.0f * box);
+    //             node.prev_position.x = (dx < box) ? (x - box - dx) : (x + box + (2.0f * box - dx));
+    //             node.prev_position.y = (dy < box) ? (y - box - dy) : (y + box + (2.0f * box - dy));
+    //         }
+    //         // std::cout << "Prev position of node " << node.id << " is " << node.prev_position << '\n';
+    //         // std::cout << "Position of node " << node.id << " is " << node.position << '\n';
+    //         // const auto v = node.position - node.prev_position;
+    //         // node.prev_position = node.position;
+    //         // node.position += v * t;
+    //
+    //         const auto before = node.position;
+    //         node.position += node.position - node.prev_position;
+    //         node.position += Vector2f{ 0.0f, -1.0f } * 19.0f * t * t;
+    //         node.prev_position = before;
+    //
+    //         // Right
+    //         constexpr float bounce = 0.9f;
+    //         if (const auto overshoot = (world_size.x - 0.5f * NODE_SIZE) - node.position.x; overshoot < 0.0f) {
+    //             node.position.x += 2.0f * overshoot * bounce;
+    //             node.prev_position.x += 2.0f * ((world_size.x - 0.5f * NODE_SIZE) - node.prev_position.x) * bounce;
+    //         }
+    //         // Up
+    //         if (const auto overshoot = (world_size.y - 0.5f * NODE_SIZE) - node.position.y; overshoot < 0.0f) {
+    //             node.position.y += 2.0f * overshoot * bounce;
+    //             node.prev_position.y += 2.0f * ((world_size.y - 0.5f * NODE_SIZE) - node.prev_position.y) * bounce;
+    //         }
+    //         // Left
+    //         if (const auto overshoot = (0.5f * NODE_SIZE) - node.position.x; overshoot > 0.0f) {
+    //             node.position.x += 2.0f * overshoot * bounce;
+    //             node.prev_position.x += 2.0f * ((0.5f * NODE_SIZE) - node.prev_position.x) * bounce;
+    //         }
+    //         // Down
+    //         if (const auto overshoot = (0.5f * NODE_SIZE) - node.position.y; overshoot > 0.0f) {
+    //             node.position.y += 2.0f * overshoot * bounce;
+    //             node.prev_position.y += 2.0f * ((0.5f * NODE_SIZE) - node.prev_position.y) * bounce;
+    //         }
+    //     }
+    // }
 
     // NOTE Because this is a rare operation and because there is no harm in delaying the removal,
     // this implementation makes at most 1 removal per function call.
-    void remove_distant_nodes() noexcept {
+    void destroy_distant_nodes() noexcept {
+        static const auto is_too_distant = [](const Vector2f& world_size, const Vector2f& pos) noexcept {
+            if (pos.x < -4.0f * world_size.x) return true;
+            if (pos.x > 8.0f * world_size.x) return true;
+            if (pos.y < -4.0f * world_size.y) return true;
+            if (pos.y > 8.0f * world_size.y) return true;
+            return false;
+        };
         std::optional<unsigned int> removed_id = std::nullopt;
         for (auto it = nodes.begin(); it != nodes.end(); ++it) {
-            if (is_too_distant(it->position)) {
+            if (is_too_distant(world_size, it->position)) {
                 std::cout << "Auto-removing Node " << it->id << " because it is too distant\n";
-                nodes.erase(it);
                 removed_id = { it->id };
+                nodes.erase(it);
                 break;
             }
         }
@@ -449,12 +526,15 @@ struct World {
         }), lines.end());
     }
 
-    // TODO improve from O(N2) by pair-calculationg the force
-    void do_physics(float dt) noexcept {
+    void springs_physics(float dt) noexcept {
+        destroy_distant_nodes();
+        // NOTE can improve from O(N2) by pair-calculationg the force
+        constexpr float spring_default_length = 6.0f;
         constexpr float G = 9.8f;
-        constexpr float K = 0.1f;
-        constexpr float scaler = 0.000002f;
-        const float t = scaler * dt;
+        constexpr float K = 0.8f;
+        constexpr float time_scaler = 0.0000025f;
+        constexpr float dissipation_ration_per_second = 0.1f;
+        const float t = time_scaler * dt;
         for (auto& node : nodes) {
             if (node.is_pinned) continue;
             // std::cout << "Old position of node " << node.id << " is " << node.position << '\n';
@@ -463,19 +543,23 @@ struct World {
             // Apply gravity to speed
             node.velocity += Vector2f{ 0.0f, -1.0f } * (t * G);
             // Apply springs to speed
+            bool has_springs = false;
             for (unsigned int index : indices_of_lines_connected_to_node_id(node.id)) {
-                // std::cout << "Found line " << lines[index].id1 << " and " << lines[index].id2 << '\n';
+                has_springs = true;
                 const auto& other_node = nodes[index_of_node_with_id(lines[index].the_other(node.id))];
-                // std::cout << "Accounting for other node " << other_node.id << '\n';
-                // TODO can improve math:
                 const Vector2f force_dir = (other_node.position - node.position).normalized();
-                const Vector2f force = force_dir * (other_node.position - node.position).length_sqr();
+                const float spring_length = (other_node.position - node.position).length();
+                // const float force_strength_sqrt = spring_default_length - spring_length; // sign is fixed by sqr later
+                // float force_strength = force_strength_sqrt * force_strength_sqrt;
+                const float force_strength = spring_length - spring_default_length;
+
+                // const float sign = (spring_length > spring_default_length) ? +1.0f : -1.0f;
+                const Vector2f force = force_dir * force_strength;
                 node.velocity += force * (t * K);
             }
+            if (has_springs) node.velocity *= 1.0f - dissipation_ration_per_second * t;
             // Apply speed to position
             node.position += node.velocity * t;
-            std::cout << "New position of node " << node.id << " is " << node.position << '\n';
-            std::cout << "New velocity of node " << node.id << " is " << node.velocity << '\n';
         }
     }
 
@@ -850,6 +934,7 @@ struct Game {
             world_size = world_size_for_aspect(aspect_w_h);
             mvp = mvp_for_world_size(world_size);
             world.set_mvp(mvp);
+            world.set_size(world_size);
         }
 
         bool should_close() const noexcept {

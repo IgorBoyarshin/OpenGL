@@ -56,12 +56,12 @@ int main() {
         game.register_input(window);
         if (game.should_close()) glfwSetWindowShouldClose(window, true);
 
-        if (global_state.pause) continue;
-
         if (global_state.resize_recalculation_required) {
             global_state.resize_recalculation_required = false;
             game.reset_dimensions(global_state.width, global_state.height);
         }
+
+        if (global_state.pause) continue;
 
         // Render
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
