@@ -29,6 +29,22 @@ struct Vec {
         return res;
     }
 
+    Vec<DIM> operator/(float scalar) const noexcept {
+        Vec<DIM> res;
+        for (unsigned int i = 0; i < DIM; i++) res[i] = d[i] / scalar;
+        return res;
+    }
+
+    // Vec<DIM>& operator/=(const Vec<DIM>& other) const noexcept {
+    //     for (unsigned int i = 0; i < DIM; i++) d[i] /= other[i];
+    //     return *this;
+    // }
+
+    Vec<DIM>& operator*=(float scalar) noexcept {
+        for (unsigned int i = 0; i < DIM; i++) d[i] *= scalar;
+        return *this;
+    }
+
     Vec<DIM> operator*(const Vec<DIM>& other) const noexcept {
         Vec<DIM> res;
         for (unsigned int i = 0; i < DIM; i++) res[i] = d[i] * other[i];

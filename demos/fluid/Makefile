@@ -5,7 +5,7 @@ classFiles =
 # Files that only have the .h version
 justHeaderFiles = Game Vec
 # Compilation flags
-OPTIMIZATION_FLAG = -O0
+OPTIMIZATION_FLAG = -O3
 LANGUAGE_LEVEL = -std=c++20
 COMPILER_FLAGS = -Wall -Wextra -Wno-unused-parameter
 LINKER_FLAGS = -lm -lGL -lGLU -lglfw -lGLEW -lXi -lX11 -lpthread -lXrandr -ldl -lXmu

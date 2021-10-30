@@ -4,6 +4,7 @@
 #include "Shader.h"
 #include "Texture.h"
 #include "Vec.h"
+#include "util.h"
 
 #include <cmath>
 #include <algorithm>
@@ -58,17 +59,21 @@ unsigned int random_id() noexcept {
 static constexpr unsigned int ID_MAX = 0xFFFFFFF;
 
 
-static constexpr float NODE_SIZE = 1.0f;
+static constexpr float NODE_SIZE = 0.4f;
+
 struct Node {
     Vec<2> pos;
     Vec<2> vel;
+    Vec<3> color;
 };
 
 
 struct World {
     Vec<2> world_size;
 
-    std::vector<Node> nodes;
+    // std::vector<Node> nodes;
+    Node* nodes;
+    unsigned int nodes_size;
 
     unsigned int vao_nodes;
     unsigned int vbo_nodes;
@@ -82,20 +87,47 @@ struct World {
     static constexpr float z_nodes = 0.3f;
     static constexpr float z_delta = 0.00001f;
 
+    float* nodes_data;
+
 
     World(const Vec<2>& world_size) : world_size(world_size) {
-        prepare_nodes(50000);
+        prepare_nodes(70000);
+        const auto count = nodes_size * vertices_per_node * node_vertex_components;
+        nodes_data = new float[count];
     }
 
     ~World() {
+        delete[] nodes_data;
+        delete[] nodes;
         glDeleteBuffers(1, &ibo_nodes);
         glDeleteBuffers(1, &vbo_nodes);
         glDeleteVertexArrays(1, &vao_nodes);
     }
 
+    float blend_unchecked(float x, float y, float t) const noexcept {
+        return x * (1.0f - t) + y * t;
+    }
+
+    Vec<2> cw_dir_perp_to(const Vec<2>& dir) const noexcept {
+        Vec<2> v{ dir[1], -dir[0] };
+        v.normalize();
+        return v;
+    }
+
+    Vec<2> speed_at(const Vec<2>& pos, const Vec<2>& attractor) const noexcept {
+        const auto max_attractor = world_size;
+        constexpr auto MAX_MAGNITUDE = 2.0f;
+        const auto t = 1.0f - ((pos - attractor).length_sqr()) / (max_attractor.length_sqr());
+        const auto magnitude = MAX_MAGNITUDE * t;
+        const auto dir = pos - attractor;
+        return cw_dir_perp_to(dir) * magnitude;
+    }
+
     void prepare_nodes(unsigned int count) noexcept {
-        nodes.reserve(count);
-        const auto border = 0.5f * NODE_SIZE;
+        // nodes.reserve(count);
+        nodes_size = count;
+        nodes = new Node[count];
+        const auto border = 10.5f * NODE_SIZE;
         for (unsigned int i = 0; i < count; i++) {
             const auto x = getRandomUniformFloat(border, world_size[0] - border);
             const auto y = getRandomUniformFloat(border, world_size[1] - border);
@@ -104,7 +136,11 @@ struct World {
             const auto vx = getRandomUniformFloat(0.0f, MAX_VEL);
             const auto vy = getRandomUniformFloat(0.0f, MAX_VEL);
             const auto vel = Vec<2>{ vx, vy };
-            nodes.emplace_back(pos, vel);
+            const auto color = Vec<3>{ x / world_size[0], y / world_size[1], 0.7f };
+            // nodes.emplace_back(pos, vel, color);
+            nodes[i].pos = pos;
+            nodes[i].vel = vel;
+            nodes[i].color = color;
         }
 
         glGenVertexArrays(1, &vao_nodes);
@@ -112,42 +148,17 @@ struct World {
         {
             glGenBuffers(1, &vbo_nodes);
             glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
-            const unsigned int size_bytes = nodes.size() * vertices_per_node * node_vertex_components * sizeof(float);
+            const unsigned int size_bytes = nodes_size * vertices_per_node * node_vertex_components * sizeof(float);
             const float* data = 0;
             glBufferData(GL_ARRAY_BUFFER, size_bytes, data, GL_DYNAMIC_DRAW);
 
             specify_attribs_for_nodes(); // proper GL_ARRAY_BUFFER must be bound!
         }
 
-        fill_nodes_indices_for_capacity(ibo_nodes, nodes.size());
+        fill_nodes_indices_for_capacity(ibo_nodes, nodes_size);
 
         glBindVertexArray(0);
     }
-
-    // std::optional<unsigned int> index_of_node_closest_to(const Vec<2>& pos) const noexcept {
-    //     constexpr float threshold = 6.0f;
-    //     int min_i = -1;
-    //     float min_dst = std::numeric_limits<float>::max();
-    //     for (unsigned int i = 0; i < nodes.size(); i++) {
-    //         const auto dst = (nodes[i].position - pos).length_sqr();
-    //         if (dst < min_dst && dst < threshold) {
-    //             min_dst = dst;
-    //             min_i = i;
-    //         }
-    //     }
-    //     if (min_i >= 0) {
-    //         return { static_cast<unsigned int>(min_i) };
-    //     }
-    //     return std::nullopt;
-    // }
-
-    // unsigned int index_of_node_with_id(unsigned int id) const noexcept {
-    //     for (unsigned int i = 0; i < nodes.size(); i++) {
-    //         if (nodes[i].id == id) return i;
-    //     }
-    //     std::cout << "[ASSERTION]: no Node with id = " << id << '\n';
-    //     assert(false);
-    // }
 
     void specify_attribs_for_nodes() const noexcept {
         {
@@ -176,90 +187,119 @@ struct World {
         }
     }
 
-    void update_and_render(float dt) noexcept {
-        do_physics(dt);
+    void update_and_render(float dt, const Vec<2>& cursor) noexcept {
+        static auto last = get_time_micros();
+        const auto p0 = get_time_micros();
+        do_physics(dt, cursor);
+        const auto p1 = get_time_micros();
         resubmit_nodes_vertices();
+        const auto p2 = get_time_micros();
         render_nodes();
+        const auto p3 = get_time_micros();
+        const auto frame_time = p3 - last;
+        const auto fps = 1'000'000.0f / frame_time;
+        std::cout
+            << "Idle = " << std::setw(5) << (p0 - last) << "  "
+            << "Physics = " << std::setw(5) << (p1 - p0) << "  "
+            << "Resubmit = " << std::setw(5) << (p2 - p1) << "  "
+            << "Render = " << std::setw(5) << (p3 - p2) << "  "
+            << "Frame time = " << std::setw(5) << frame_time << "  "
+            << "FPS = " << std::setw(5) << fps << '\n';
+        last = p3;
     }
 
     void render_nodes() const noexcept {
         shader_node.bind();
         glBindVertexArray(vao_nodes);
-        glDrawElements(GL_TRIANGLES, nodes.size() * indices_per_node, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, nodes_size * indices_per_node, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
     }
 
-    void do_physics(float dt) noexcept {
+    void do_physics(float dt, const Vec<2>& cursor) noexcept {
         constexpr float speed_scaler = 5.0f * 0.0000025f;
         static const auto bound = [this](Node& node){
             static constexpr auto border = 0.5f * NODE_SIZE;
             if ((node.pos[0] < border) || ((world_size[0] - border) < node.pos[0])) node.vel[0] = -node.vel[0];
             if ((node.pos[1] < border) || ((world_size[1] - border) < node.pos[1])) node.vel[1] = -node.vel[1];
         };
+        // static const auto handle_collision_if_present = [](Node& node1, Node& node2){
+        //     if (std::abs(node1.pos[0] - node2.pos[0]) > NODE_SIZE) return;
+        //     if (std::abs(node1.pos[1] - node2.pos[1]) > NODE_SIZE) return;
+        //     node1.vel *= -1;
+        //     node2.vel *= -1;
+        // };
 
-        for (unsigned int i = 0; i < nodes.size(); i++) {
+        for (unsigned int i = 0; i < nodes_size; i++) {
             auto& node = nodes[i];
+
+            node.vel = speed_at(node.pos, world_size / 2.0f);
             node.pos += node.vel * (speed_scaler * dt);
-            bound(node);
+
+            // for (unsigned int j = i + 1; j < nodes.size(); j++) {
+            //     auto& node2 = nodes[j];
+            //     handle_collision_if_present(node, node2);
+            // }
+
+            // bound(node);
         }
     }
 
     // TODO @speed store this ram-buffer separately for easier modification
     void resubmit_nodes_vertices() const noexcept {
         glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
-        const auto count = nodes.size() * vertices_per_node * node_vertex_components;
+        const auto count = nodes_size * vertices_per_node * node_vertex_components;
         const auto actual_size_bytes = count * sizeof(float);
-        float data[count];
+        // float data[count];
 
-        for (unsigned int i = 0; i < nodes.size(); i++) {
-            const auto color = Vec<3>{ 0.8f, 0.2f, 0.4f };
+        for (unsigned int i = 0; i < nodes_size; i++) {
+            // const auto color = Vec<3>{ 0.8f, 0.2f, 0.4f };
             const auto& node = nodes[i];
             const auto half_size = 0.5f * NODE_SIZE;
             const float z = z_nodes + z_delta * i;
 
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 0] = -1.0f;
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 1] = -1.0f;
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 2] = node.pos[0] - half_size;
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 3] = node.pos[1] - half_size;
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 4] = z;
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 5] = color[0];
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 6] = color[1];
-            data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 7] = color[2];
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 0] = -1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 1] = -1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 2] = node.pos[0] - half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 3] = node.pos[1] - half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 4] = z;
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 5] = node.color[0];
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 6] = node.color[1];
+            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 7] = node.color[2];
 
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 0] = -1.0f;
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 1] = +1.0f;
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 2] = node.pos[0] - half_size;
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 3] = node.pos[1] + half_size;
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 4] = z;
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 5] = color[0];
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 6] = color[1];
-            data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 7] = color[2];
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 0] = -1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 1] = +1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 2] = node.pos[0] - half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 3] = node.pos[1] + half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 4] = z;
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 5] = node.color[0];
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 6] = node.color[1];
+            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 7] = node.color[2];
 
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 0] = +1.0f;
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 1] = +1.0f;
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 2] = node.pos[0] + half_size;
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 3] = node.pos[1] + half_size;
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 4] = z;
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 5] = color[0];
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 6] = color[1];
-            data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 7] = color[2];
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 0] = +1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 1] = +1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 2] = node.pos[0] + half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 3] = node.pos[1] + half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 4] = z;
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 5] = node.color[0];
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 6] = node.color[1];
+            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 7] = node.color[2];
 
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 0] = +1.0f;
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 1] = -1.0f;
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 2] = node.pos[0] + half_size;
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 3] = node.pos[1] - half_size;
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 4] = z;
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 5] = color[0];
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 6] = color[1];
-            data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 7] = color[2];
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 0] = +1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 1] = -1.0f;
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 2] = node.pos[0] + half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 3] = node.pos[1] - half_size;
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 4] = z;
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 5] = node.color[0];
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 6] = node.color[1];
+            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 7] = node.color[2];
         }
 
-        glBufferSubData(GL_ARRAY_BUFFER, 0, actual_size_bytes, data);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, actual_size_bytes, nodes_data);
     }
 
     // Can be done in advance for capacity, because indices are the same for all Nodes
     static void fill_nodes_indices_for_capacity(unsigned int& ibo_nodes, unsigned int nodes_capacity) noexcept {
-        unsigned int data[indices_per_node * nodes_capacity];
+        unsigned int* data = new unsigned int[indices_per_node * nodes_capacity];
         for (unsigned int i = 0; i < nodes_capacity; i++) {
             data[i * indices_per_node + 0] = i * vertices_per_node + 0;
             data[i * indices_per_node + 1] = i * vertices_per_node + 1;
@@ -273,6 +313,7 @@ struct World {
         glGenBuffers(1, &ibo_nodes);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_nodes);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, size_bytes, data, GL_STATIC_DRAW); // will be changed a couple of times
+        delete[] data;
     }
 
     void set_mvp(const Matrix4f& mvp) noexcept {
@@ -306,6 +347,8 @@ struct Game {
         bool pressed_space = false;
         bool physics_on = false;
 
+        Vec<2> cursor;
+
         static Matrix4f mvp_for_world_size(const Vec<2>& world_size) noexcept {
             return Matrix4f::orthographic(0.0f, world_size[0], 0.0f, world_size[1], -1.0f, 1.0f);
         }
@@ -334,11 +377,13 @@ struct Game {
         }
 
         void update_and_render(float dt) noexcept {
-            world.update_and_render(dt);
+            world.update_and_render(dt, cursor_to_world_coord(cursor));
         }
 
         void register_input(GLFWwindow* window) noexcept {
             if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) game_should_close = true;
+
+            cursor = get_cursor(window);
 
             // if (!pressed_space && (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)) {
             //     pressed_space = true;
@@ -375,8 +420,6 @@ struct Game {
             //     }
             // }
         }
-
-        void register_mouse(float x, float y) noexcept {}
 
         void reset_dimensions(unsigned int width, unsigned int height) noexcept {
             window_size = Vec<2>{ 1.0f * width, 1.0f * height };

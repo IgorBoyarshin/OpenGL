@@ -7,11 +7,11 @@
 #include <random>
 #include <numeric>
 #include <algorithm>
-#include <time.h>
 #include <string_view>
 #include <iomanip>
 
 #include "Game.h"
+#include "util.h"
 
 
 struct GlobalState {
@@ -28,11 +28,11 @@ static GlobalState global_state;
 
 GLFWwindow* init(unsigned int widht, unsigned int height);
 
-float get_time_micros() noexcept {
-    timespec t;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &t);
-    return static_cast<float>(t.tv_sec) * 1'000'000.0f + static_cast<float>(t.tv_nsec) / 1000.0f;
-}
+// float get_time_micros() noexcept {
+//     timespec t;
+//     clock_gettime(CLOCK_MONOTONIC_RAW, &t);
+//     return static_cast<float>(t.tv_sec) * 1'000'000.0f + static_cast<float>(t.tv_nsec) / 1000.0f;
+// }
 
 int main() {
     std::cout << "========================== BEGIN =========================\n";
@@ -46,8 +46,8 @@ int main() {
         const float current_time = get_time_micros();
         const float delta_time = current_time - last_time;
         last_time = current_time;
-        const float fps = 1000000.0f / delta_time;
-        std::cout << "Loop delta time = " << std::setw(5) << delta_time << " micros (" << fps << " FPS)\n";
+        // const float fps = 1000000.0f / delta_time;
+        // std::cout << "Loop delta time = " << std::setw(5) << delta_time << " micros (" << fps << " FPS)\n";
 
         glfwPollEvents();
         // if (global_state.mouse_updated) {
