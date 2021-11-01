@@ -59,21 +59,25 @@ unsigned int random_id() noexcept {
 static constexpr unsigned int ID_MAX = 0xFFFFFFF;
 
 
-static constexpr float NODE_SIZE = 0.4f;
+static constexpr float NODE_SIZE = 0.6f;
 
-struct Node {
-    Vec<2> pos;
-    Vec<2> vel;
-    Vec<3> color;
-};
+// struct Node {
+//     Vec<2> pos;
+//     Vec<2> vel;
+//     Vec<3> color;
+// };
 
 
 struct World {
     Vec<2> world_size;
 
     // std::vector<Node> nodes;
-    Node* nodes;
+    // Node* nodes;
     unsigned int nodes_size;
+
+    Vec<2>* nodes_pos;
+    Vec<2>* nodes_vel;
+    Vec<3>* nodes_color;
 
     unsigned int vao_nodes;
     unsigned int vbo_nodes;
@@ -91,14 +95,15 @@ struct World {
 
 
     World(const Vec<2>& world_size) : world_size(world_size) {
-        prepare_nodes(70000);
-        const auto count = nodes_size * vertices_per_node * node_vertex_components;
-        nodes_data = new float[count];
+        prepare_nodes(500000);
     }
 
     ~World() {
         delete[] nodes_data;
-        delete[] nodes;
+        // delete[] nodes;
+        delete[] nodes_pos;
+        delete[] nodes_vel;
+        delete[] nodes_color;
         glDeleteBuffers(1, &ibo_nodes);
         glDeleteBuffers(1, &vbo_nodes);
         glDeleteVertexArrays(1, &vao_nodes);
@@ -124,9 +129,13 @@ struct World {
     }
 
     void prepare_nodes(unsigned int count) noexcept {
-        // nodes.reserve(count);
         nodes_size = count;
-        nodes = new Node[count];
+        // nodes.reserve(count);
+        // nodes = new Node[count];
+        nodes_pos = new Vec<2>[count];
+        nodes_vel = new Vec<2>[count];
+        nodes_color = new Vec<3>[count];
+
         const auto border = 10.5f * NODE_SIZE;
         for (unsigned int i = 0; i < count; i++) {
             const auto x = getRandomUniformFloat(border, world_size[0] - border);
@@ -138,9 +147,12 @@ struct World {
             const auto vel = Vec<2>{ vx, vy };
             const auto color = Vec<3>{ x / world_size[0], y / world_size[1], 0.7f };
             // nodes.emplace_back(pos, vel, color);
-            nodes[i].pos = pos;
-            nodes[i].vel = vel;
-            nodes[i].color = color;
+            // nodes[i].pos = pos;
+            // nodes[i].vel = vel;
+            // nodes[i].color = color;
+            nodes_pos[i] = pos;
+            nodes_vel[i] = vel;
+            nodes_color[i] = color;
         }
 
         glGenVertexArrays(1, &vao_nodes);
@@ -149,8 +161,8 @@ struct World {
             glGenBuffers(1, &vbo_nodes);
             glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
             const unsigned int size_bytes = nodes_size * vertices_per_node * node_vertex_components * sizeof(float);
-            const float* data = 0;
-            glBufferData(GL_ARRAY_BUFFER, size_bytes, data, GL_DYNAMIC_DRAW);
+            nodes_data = allocate_and_init_all_nodes_data();
+            glBufferData(GL_ARRAY_BUFFER, size_bytes, nodes_data, GL_DYNAMIC_DRAW);
 
             specify_attribs_for_nodes(); // proper GL_ARRAY_BUFFER must be bound!
         }
@@ -160,12 +172,39 @@ struct World {
         glBindVertexArray(0);
     }
 
+    // void specify_attribs_for_nodes() const noexcept {
+    //     {
+    //         const auto index = 0;
+    //         glEnableVertexAttribArray(index);
+    //         const auto floats_per_vertex = 2; // inner_xy
+    //         const auto stride_bytes = node_vertex_components * sizeof(float);
+    //         const auto offset_bytes = 0;
+    //         glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+    //     }
+    //     {
+    //         const auto index = 1;
+    //         glEnableVertexAttribArray(index);
+    //         const auto floats_per_vertex = 3; // x, y, z
+    //         const auto stride_bytes = node_vertex_components * sizeof(float);
+    //         const auto offset_bytes = 2 * sizeof(float); // skip inner_xy
+    //         glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+    //     }
+    //     {
+    //         const auto index = 2;
+    //         glEnableVertexAttribArray(index);
+    //         const auto floats_per_vertex = 3; // color3
+    //         const auto stride_bytes = node_vertex_components * sizeof(float);
+    //         const auto offset_bytes = (2 + 3) * sizeof(float); // skip inner_xy and x,y,z
+    //         glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
+    //     }
+    // }
+
     void specify_attribs_for_nodes() const noexcept {
         {
             const auto index = 0;
             glEnableVertexAttribArray(index);
             const auto floats_per_vertex = 2; // inner_xy
-            const auto stride_bytes = node_vertex_components * sizeof(float);
+            const auto stride_bytes = 0;
             const auto offset_bytes = 0;
             glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
         }
@@ -173,16 +212,16 @@ struct World {
             const auto index = 1;
             glEnableVertexAttribArray(index);
             const auto floats_per_vertex = 3; // x, y, z
-            const auto stride_bytes = node_vertex_components * sizeof(float);
-            const auto offset_bytes = 2 * sizeof(float); // skip inner_xy
+            const auto stride_bytes = 0;
+            const auto offset_bytes = (2 * sizeof(float)) * nodes_size * vertices_per_node; // skip inner_xy of all
             glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
         }
         {
             const auto index = 2;
             glEnableVertexAttribArray(index);
             const auto floats_per_vertex = 3; // color3
-            const auto stride_bytes = node_vertex_components * sizeof(float);
-            const auto offset_bytes = (2 + 3) * sizeof(float); // skip inner_xy and x,y,z
+            const auto stride_bytes = 0;
+            const auto offset_bytes = ((2 + 3) * sizeof(float)) * nodes_size * vertices_per_node; // skip inner_xy and x,y,z of all
             glVertexAttribPointer(index, floats_per_vertex, GL_FLOAT, GL_FALSE, stride_bytes, reinterpret_cast<const void*>(offset_bytes));
         }
     }
@@ -192,7 +231,7 @@ struct World {
         const auto p0 = get_time_micros();
         do_physics(dt, cursor);
         const auto p1 = get_time_micros();
-        resubmit_nodes_vertices();
+        resubmit_nodes_vertices_pos();
         const auto p2 = get_time_micros();
         render_nodes();
         const auto p3 = get_time_micros();
@@ -217,11 +256,11 @@ struct World {
 
     void do_physics(float dt, const Vec<2>& cursor) noexcept {
         constexpr float speed_scaler = 5.0f * 0.0000025f;
-        static const auto bound = [this](Node& node){
-            static constexpr auto border = 0.5f * NODE_SIZE;
-            if ((node.pos[0] < border) || ((world_size[0] - border) < node.pos[0])) node.vel[0] = -node.vel[0];
-            if ((node.pos[1] < border) || ((world_size[1] - border) < node.pos[1])) node.vel[1] = -node.vel[1];
-        };
+        // static const auto bound = [this](Node& node){
+        //     static constexpr auto border = 0.5f * NODE_SIZE;
+        //     if ((node.pos[0] < border) || ((world_size[0] - border) < node.pos[0])) node.vel[0] = -node.vel[0];
+        //     if ((node.pos[1] < border) || ((world_size[1] - border) < node.pos[1])) node.vel[1] = -node.vel[1];
+        // };
         // static const auto handle_collision_if_present = [](Node& node1, Node& node2){
         //     if (std::abs(node1.pos[0] - node2.pos[0]) > NODE_SIZE) return;
         //     if (std::abs(node1.pos[1] - node2.pos[1]) > NODE_SIZE) return;
@@ -230,10 +269,13 @@ struct World {
         // };
 
         for (unsigned int i = 0; i < nodes_size; i++) {
-            auto& node = nodes[i];
+            // auto& node = nodes[i];
+            auto& node_pos = nodes_pos[i];
+            auto& node_vel = nodes_vel[i];
 
-            node.vel = speed_at(node.pos, world_size / 2.0f);
-            node.pos += node.vel * (speed_scaler * dt);
+            // node_vel = speed_at(node_pos, cursor);
+            node_vel = speed_at(node_pos, world_size / 2.0f);
+            node_pos += node_vel * (speed_scaler * dt);
 
             // for (unsigned int j = i + 1; j < nodes.size(); j++) {
             //     auto& node2 = nodes[j];
@@ -244,57 +286,137 @@ struct World {
         }
     }
 
-    // TODO @speed store this ram-buffer separately for easier modification
-    void resubmit_nodes_vertices() const noexcept {
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
+    // TODO name 2,3,3
+    float* allocate_and_init_all_nodes_data() const noexcept {
         const auto count = nodes_size * vertices_per_node * node_vertex_components;
-        const auto actual_size_bytes = count * sizeof(float);
-        // float data[count];
+        float* nodes_data = new float[count];
+        unsigned int i = 0;
 
-        for (unsigned int i = 0; i < nodes_size; i++) {
-            // const auto color = Vec<3>{ 0.8f, 0.2f, 0.4f };
-            const auto& node = nodes[i];
-            const auto half_size = 0.5f * NODE_SIZE;
-            const float z = z_nodes + z_delta * i;
-
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 0] = -1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 1] = -1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 2] = node.pos[0] - half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 3] = node.pos[1] - half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 4] = z;
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 5] = node.color[0];
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 6] = node.color[1];
-            nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 7] = node.color[2];
-
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 0] = -1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 1] = +1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 2] = node.pos[0] - half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 3] = node.pos[1] + half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 4] = z;
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 5] = node.color[0];
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 6] = node.color[1];
-            nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 7] = node.color[2];
-
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 0] = +1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 1] = +1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 2] = node.pos[0] + half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 3] = node.pos[1] + half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 4] = z;
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 5] = node.color[0];
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 6] = node.color[1];
-            nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 7] = node.color[2];
-
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 0] = +1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 1] = -1.0f;
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 2] = node.pos[0] + half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 3] = node.pos[1] - half_size;
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 4] = z;
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 5] = node.color[0];
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 6] = node.color[1];
-            nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 7] = node.color[2];
+        for (unsigned int j = 0; j < nodes_size; j++, i += vertices_per_node * 2) { // inner_xy
+            nodes_data[i + 2 * 0 + 0] = -1.0f;
+            nodes_data[i + 2 * 0 + 1] = -1.0f;
+            nodes_data[i + 2 * 1 + 0] = -1.0f;
+            nodes_data[i + 2 * 1 + 1] = +1.0f;
+            nodes_data[i + 2 * 2 + 0] = +1.0f;
+            nodes_data[i + 2 * 2 + 1] = +1.0f;
+            nodes_data[i + 2 * 3 + 0] = +1.0f;
+            nodes_data[i + 2 * 3 + 1] = -1.0f;
         }
 
-        glBufferSubData(GL_ARRAY_BUFFER, 0, actual_size_bytes, nodes_data);
+        const auto half_size = 0.5f * NODE_SIZE;
+        for (unsigned int j = 0; j < nodes_size; j++, i += vertices_per_node * 3) { // xyz
+            const float z = z_nodes + z_delta * j;
+            nodes_data[i + 3 * 0 + 0] = nodes_pos[j][0] - half_size;
+            nodes_data[i + 3 * 0 + 1] = nodes_pos[j][1] - half_size;
+            nodes_data[i + 3 * 0 + 2] = z;
+            nodes_data[i + 3 * 1 + 0] = nodes_pos[j][0] - half_size;
+            nodes_data[i + 3 * 1 + 1] = nodes_pos[j][1] + half_size;
+            nodes_data[i + 3 * 1 + 2] = z;
+            nodes_data[i + 3 * 2 + 0] = nodes_pos[j][0] + half_size;
+            nodes_data[i + 3 * 2 + 1] = nodes_pos[j][1] + half_size;
+            nodes_data[i + 3 * 2 + 2] = z;
+            nodes_data[i + 3 * 3 + 0] = nodes_pos[j][0] + half_size;
+            nodes_data[i + 3 * 3 + 1] = nodes_pos[j][1] - half_size;
+            nodes_data[i + 3 * 3 + 2] = z;
+        }
+
+        for (unsigned int j = 0; j < nodes_size; j++, i += vertices_per_node * 3) { // color3
+            nodes_data[i + 3 * 0 + 0] = nodes_color[j][0];
+            nodes_data[i + 3 * 0 + 1] = nodes_color[j][1];
+            nodes_data[i + 3 * 0 + 2] = nodes_color[j][2];
+            nodes_data[i + 3 * 1 + 0] = nodes_color[j][0];
+            nodes_data[i + 3 * 1 + 1] = nodes_color[j][1];
+            nodes_data[i + 3 * 1 + 2] = nodes_color[j][2];
+            nodes_data[i + 3 * 2 + 0] = nodes_color[j][0];
+            nodes_data[i + 3 * 2 + 1] = nodes_color[j][1];
+            nodes_data[i + 3 * 2 + 2] = nodes_color[j][2];
+            nodes_data[i + 3 * 3 + 0] = nodes_color[j][0];
+            nodes_data[i + 3 * 3 + 1] = nodes_color[j][1];
+            nodes_data[i + 3 * 3 + 2] = nodes_color[j][2];
+        }
+
+        return nodes_data;
+    }
+
+    // void resubmit_nodes_vertices() const noexcept {
+    //     glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
+    //     const auto count = nodes_size * vertices_per_node * node_vertex_components;
+    //     const auto actual_size_bytes = count * sizeof(float);
+    //     // float data[count];
+    //
+    //     for (unsigned int i = 0; i < nodes_size; i++) {
+    //         // const auto color = Vec<3>{ 0.8f, 0.2f, 0.4f };
+    //         const auto& node = nodes[i];
+    //         const auto half_size = 0.5f * NODE_SIZE;
+    //         const float z = z_nodes + z_delta * i;
+    //
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 0] = -1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 1] = -1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 2] = node.pos[0] - half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 3] = node.pos[1] - half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 4] = z;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 5] = node.color[0];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 6] = node.color[1];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 0 * node_vertex_components + 7] = node.color[2];
+    //
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 0] = -1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 1] = +1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 2] = node.pos[0] - half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 3] = node.pos[1] + half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 4] = z;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 5] = node.color[0];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 6] = node.color[1];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 1 * node_vertex_components + 7] = node.color[2];
+    //
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 0] = +1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 1] = +1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 2] = node.pos[0] + half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 3] = node.pos[1] + half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 4] = z;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 5] = node.color[0];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 6] = node.color[1];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 2 * node_vertex_components + 7] = node.color[2];
+    //
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 0] = +1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 1] = -1.0f;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 2] = node.pos[0] + half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 3] = node.pos[1] - half_size;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 4] = z;
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 5] = node.color[0];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 6] = node.color[1];
+    //         nodes_data[i * vertices_per_node * node_vertex_components + 3 * node_vertex_components + 7] = node.color[2];
+    //     }
+    //
+    //     glBufferSubData(GL_ARRAY_BUFFER, 0, actual_size_bytes, nodes_data);
+    // }
+
+    void resubmit_nodes_vertices_pos() const noexcept {
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
+        const auto offset = nodes_size * vertices_per_node * 2; // skip inner_xy
+        const auto offset_bytes = offset * sizeof(float);
+        const auto count = nodes_size * vertices_per_node * 3;
+        const auto actual_size_bytes = count * sizeof(float);
+
+        const auto half_size = 0.5f * NODE_SIZE;
+        for (unsigned int i = 0; i < nodes_size; i++) {
+            const float z = z_nodes + z_delta * i;
+            const auto local_offset = i * vertices_per_node * 3;
+
+            nodes_data[offset + local_offset + 3 * 0 + 0] = nodes_pos[i][0] - half_size;
+            nodes_data[offset + local_offset + 3 * 0 + 1] = nodes_pos[i][1] - half_size;
+            nodes_data[offset + local_offset + 3 * 0 + 2] = z;
+            nodes_data[offset + local_offset + 3 * 1 + 0] = nodes_pos[i][0] - half_size;
+            nodes_data[offset + local_offset + 3 * 1 + 1] = nodes_pos[i][1] + half_size;
+            nodes_data[offset + local_offset + 3 * 1 + 2] = z;
+            nodes_data[offset + local_offset + 3 * 2 + 0] = nodes_pos[i][0] + half_size;
+            nodes_data[offset + local_offset + 3 * 2 + 1] = nodes_pos[i][1] + half_size;
+            nodes_data[offset + local_offset + 3 * 2 + 2] = z;
+            nodes_data[offset + local_offset + 3 * 3 + 0] = nodes_pos[i][0] + half_size;
+            nodes_data[offset + local_offset + 3 * 3 + 1] = nodes_pos[i][1] - half_size;
+            nodes_data[offset + local_offset + 3 * 3 + 2] = z;
+        }
+
+        glBufferSubData(GL_ARRAY_BUFFER, offset_bytes, actual_size_bytes, nodes_data + offset);
     }
 
     // Can be done in advance for capacity, because indices are the same for all Nodes
