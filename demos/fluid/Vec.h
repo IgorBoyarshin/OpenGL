@@ -106,6 +106,13 @@ struct Vec {
         for (unsigned int i = 0; i < DIM; i++) sum += d[i] * d[i];
         return sum;
     }
+
+    // TODO
+    // Vec<2> cw_dir_perp_to(const Vec<2>& dir) const noexcept {
+    //     Vec<2> v{ dir[1], -dir[0] };
+    //     v.normalize();
+    //     return v;
+    // }
 };
 
 template<>
