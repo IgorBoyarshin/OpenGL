@@ -23,6 +23,9 @@ class Shader {
         inline Shader(const std::string& filepathVertex, const std::string& filepathFragment) noexcept :
             m_ID(createShader(readFromFile(filepathVertex), readFromFile(filepathFragment))) {}
 
+        inline Shader(const std::string& filepathVertex, const std::string& filepathGeometry, const std::string& filepathFragment) noexcept :
+            m_ID(createShader(readFromFile(filepathVertex), readFromFile(filepathGeometry), readFromFile(filepathFragment))) {}
+
         inline ~Shader() noexcept { glDeleteProgram(m_ID); }
 
         inline void bind()   const noexcept { glUseProgram(m_ID); }
@@ -80,6 +83,9 @@ class Shader {
                     case GL_VERTEX_SHADER:
                         std::cout << "vertex shader";
                         break;
+                    case GL_GEOMETRY_SHADER:
+                        std::cout << "geometry shader";
+                        break;
                     case GL_FRAGMENT_SHADER:
                         std::cout << "fragment shader";
                         break;
@@ -104,6 +110,25 @@ class Shader {
             glValidateProgram(program);
 
             glDeleteShader(vs);
+            glDeleteShader(fs);
+
+            return program;
+        }
+
+        inline unsigned int createShader(const std::string& vertexShader, const std::string& geometryShader, const std::string& fragmentShader) noexcept {
+            unsigned int program = glCreateProgram();
+            unsigned int vs = compileShader(GL_VERTEX_SHADER, vertexShader);
+            unsigned int gs = compileShader(GL_GEOMETRY_SHADER, geometryShader);
+            unsigned int fs = compileShader(GL_FRAGMENT_SHADER, fragmentShader);
+
+            glAttachShader(program, vs);
+            glAttachShader(program, gs);
+            glAttachShader(program, fs);
+            glLinkProgram(program);
+            glValidateProgram(program);
+
+            glDeleteShader(vs);
+            glDeleteShader(gs);
             glDeleteShader(fs);
 
             return program;
