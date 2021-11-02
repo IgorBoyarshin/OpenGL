@@ -12,7 +12,7 @@ out vec2 v_pos;
 out vec3 v_color;
 
 void main() {
-    const float off = 0.001;
+    const float off = 0.0014;
     v_color = gs_in[0].color;
 
     // XXX wew subtract the Z to make each subsequent oobject be behind, thus not rendered,

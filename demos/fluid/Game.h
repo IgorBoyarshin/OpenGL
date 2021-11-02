@@ -1,7 +1,7 @@
 #ifndef GAME_H
 #define GAME_H
 
-#include "World5.h"
+#include "World6.h"
 
 
 struct Game {
@@ -57,7 +57,16 @@ struct Game {
 
         void register_input(GLFWwindow* window) noexcept {
             if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) game_should_close = true;
+
             cursor = get_cursor(window);
+
+            if ((glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE) && physics_on) {
+                physics_on = false;
+                world.flip_physics();
+            } else if ((glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) && !physics_on) {
+                physics_on = true;
+                world.flip_physics();
+            }
         }
 
         void reset_dimensions(unsigned int width, unsigned int height) noexcept {
