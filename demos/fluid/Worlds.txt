@@ -3,3 +3,8 @@ There is actually no need to update the nodes_data array, we can simply upload t
 
 World6 compared to World5:
 Simplified, inlined physics math
+
+World7 compared to World6:
+- xs and ys stored separately, consequently. Attrib changed: x and y input is split now
+- xs and ys allocation is 32-bytes aligned
+- intrinsics (AVX) for 256-bit (8-float) operations: 5x speedup of the loop!
