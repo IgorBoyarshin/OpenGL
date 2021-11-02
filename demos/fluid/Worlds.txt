@@ -1,0 +1,2 @@
+World5 compared to World4:
+There is actually no need to update the nodes_data array, we can simply upload the nodes_pos array directly to GPU.

@@ -38,6 +38,7 @@ struct World {
 
     unsigned int nodes_size;
 
+    // float* nodes_data;
     Vec<2>* nodes_pos;
     Vec<2>* nodes_vel;
     Vec<3>* nodes_color;
@@ -49,15 +50,13 @@ struct World {
 
     Shader shader_node{"node_geo.vert", "node.geom", "node.frag"};
 
-    float* nodes_data;
-
 
     World(const Vec<2>& world_size) : world_size(world_size) {
         prepare_nodes(4 * 500000);
     }
 
     ~World() {
-        delete[] nodes_data;
+        // delete[] nodes_data;
         delete[] nodes_pos;
         delete[] nodes_vel;
         delete[] nodes_color;
@@ -111,8 +110,9 @@ struct World {
             glGenBuffers(1, &vbo_nodes);
             glBindBuffer(GL_ARRAY_BUFFER, vbo_nodes);
             const unsigned int size_bytes = nodes_size * node_vertex_components * sizeof(float);
-            nodes_data = allocate_and_init_all_nodes_data();
+            const float* nodes_data = allocate_and_init_all_nodes_data();
             glBufferData(GL_ARRAY_BUFFER, size_bytes, nodes_data, GL_DYNAMIC_DRAW);
+            delete[] nodes_data;
 
             specify_attribs_for_nodes(); // proper GL_ARRAY_BUFFER must be bound!
         }
@@ -211,13 +211,13 @@ struct World {
 
         const auto p1 = get_time_micros();
 
-        for (unsigned int i = 0; i < nodes_size; i++) {
-            nodes_data[i * 2 + 0] = nodes_pos[i][0];
-            nodes_data[i * 2 + 1] = nodes_pos[i][1];
-        }
+        // for (unsigned int i = 0; i < nodes_size; i++) {
+        //     nodes_data[i * 2 + 0] = nodes_pos[i][0];
+        //     nodes_data[i * 2 + 1] = nodes_pos[i][1];
+        // }
         const auto p2 = get_time_micros();
 
-        glBufferSubData(GL_ARRAY_BUFFER, 0, actual_size_bytes, nodes_data);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, actual_size_bytes, nodes_pos);
         const auto p3 = get_time_micros();
 
         std::cout
