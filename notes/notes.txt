@@ -26,4 +26,8 @@ Function stbi_load returns an array that has (rgb) tripplets row-by-row, top-to-
 
 
 VertexAttribArray's are bound to the specific ARRAY_BUFFER (vbo)!!!
-So upon recreation of an VBO, you mus specify the VertexAttribArray once again!!!
+So upon recreation of a VBO, you must specify the VertexAttribArray once again!!!
+
+
+Get attribute location form shader:
+glGetAttribLocation(program, "NAME");

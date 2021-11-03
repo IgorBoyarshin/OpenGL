@@ -8,3 +8,7 @@ World7 compared to World6:
 - xs and ys stored separately, consequently. Attrib changed: x and y input is split now
 - xs and ys allocation is 32-bytes aligned
 - intrinsics (AVX) for 256-bit (8-float) operations: 5x speedup of the loop!
+
+World8 compared to World7:
+- pos (re)calculations moved to vertex shader
+- returned to interleaved data (xy color, xy color, ...) to simplify transform feedback output and because it does not matter anymore

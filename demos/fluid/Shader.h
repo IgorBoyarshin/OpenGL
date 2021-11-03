@@ -26,6 +26,9 @@ class Shader {
         inline Shader(const std::string& filepathVertex, const std::string& filepathGeometry, const std::string& filepathFragment) noexcept :
             m_ID(createShader(readFromFile(filepathVertex), readFromFile(filepathGeometry), readFromFile(filepathFragment))) {}
 
+        inline Shader(const std::string& filepathVertex, const std::string& filepathFragment, const char* const * transformVariables, unsigned int count) noexcept :
+            m_ID(createShaderWithTransform(readFromFile(filepathVertex), readFromFile(filepathFragment), transformVariables, count)) {}
+
         inline ~Shader() noexcept { glDeleteProgram(m_ID); }
 
         inline void bind()   const noexcept { glUseProgram(m_ID); }
@@ -129,6 +132,26 @@ class Shader {
 
             glDeleteShader(vs);
             glDeleteShader(gs);
+            glDeleteShader(fs);
+
+            return program;
+        }
+
+        inline unsigned int createShaderWithTransform(const std::string& vertexShader, const std::string& fragmentShader, const char* const * transformVariables, unsigned int count) noexcept {
+            unsigned int program = glCreateProgram();
+            unsigned int vs = compileShader(GL_VERTEX_SHADER, vertexShader);
+            unsigned int fs = compileShader(GL_FRAGMENT_SHADER, fragmentShader);
+
+            glAttachShader(program, vs);
+            glAttachShader(program, fs);
+
+            // glTransformFeedbackVaryings(program, transformVariables.size(), &transformVariables[0], GL_SEPARATE_ATTRIBS);
+            glTransformFeedbackVaryings(program, count, transformVariables, GL_INTERLEAVED_ATTRIBS);
+
+            glLinkProgram(program);
+            glValidateProgram(program);
+
+            glDeleteShader(vs);
             glDeleteShader(fs);
 
             return program;
