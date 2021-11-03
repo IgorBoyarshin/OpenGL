@@ -34,6 +34,8 @@ static constexpr float NODE_SIZE = 0.2f;
 
 
 struct World {
+    bool physics_on = true;
+
     Vec<2> world_size;
 
     unsigned int nodes_size;
@@ -142,7 +144,7 @@ struct World {
     void update_and_render(float dt, const Vec<2>& cursor) noexcept {
         static auto last = get_time_micros();
         const auto p0 = get_time_micros();
-        do_physics(dt, cursor);
+        if (physics_on) do_physics(dt, cursor);
         const auto p1 = get_time_micros();
         resubmit_nodes_vertices_pos();
         const auto p2 = get_time_micros();
@@ -234,6 +236,10 @@ struct World {
 
     void set_size(const Vec<2>& size) noexcept {
         world_size = size;
+    }
+
+    void flip_physics() noexcept {
+        physics_on = !physics_on;
     }
 };
 
